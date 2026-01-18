@@ -105,24 +105,28 @@ All commands are now **slash commands** - just type `/` in Discord to see them!
 - `/addstreamer <username>` - Add a Twitch streamer to the monitoring list
 - `/removestreamer <username>` - Remove a Twitch streamer from the monitoring list
 - `/liststreamers` - Show all currently monitored streamers
+- `/nudgetwitch` - Check and post all current live streams
 
 **Examples:**
 ```
 /addstreamer username:shroud
 /removestreamer username:ninja
 /liststreamers
+/nudgetwitch
 ```
 
 ### YouTube Commands
 - `/addchannel <channel_id>` - Add a YouTube channel to the monitoring list
 - `/removechannel <channel_id>` - Remove a YouTube channel from the monitoring list
 - `/listchannels` - Show all currently monitored YouTube channels
+- `/nudgeyt` - Check and post all latest videos
 
 **Examples:**
 ```
 /addchannel channel_id:UCX6OQ3DkcsbYNE6H8uQQuVA
 /removechannel channel_id:UCX6OQ3DkcsbYNE6H8uQQuVA
 /listchannels
+/nudgeyt
 ```
 
 **Finding YouTube Channel IDs:**

@@ -84,6 +84,14 @@ client.once(readyEvent, async () => {
       description: 'Show all monitored YouTube channels'
     },
     {
+      name: 'nudgetwitch',
+      description: 'Check and post current live Twitch streams'
+    },
+    {
+      name: 'nudgeyt',
+      description: 'Check and post latest YouTube videos'
+    },
+    {
       name: 'help',
       description: 'Show all available commands'
     }
@@ -236,15 +244,19 @@ client.on('interactionCreate', async (interaction) => {
 \`/addstreamer <username>\` - Add a Twitch streamer to monitor
 \`/removestreamer <username>\` - Remove a Twitch streamer
 \`/liststreamers\` - Show all monitored streamers
+\`/nudgetwitch\` - Check and post current live streams
 
 **YouTube Commands:**
 \`/addchannel <channel_id>\` - Add a YouTube channel to monitor
 \`/removechannel <channel_id>\` - Remove a YouTube channel
 \`/listchannels\` - Show all monitored channels
+\`/nudgeyt\` - Check and post latest videos
 
 **Examples:**
 \`/addstreamer username:shroud\`
 \`/addchannel channel_id:UCX6OQ3DkcsbYNE6H8uQQuVA\`
+\`/nudgetwitch\` - Check all monitored streamers
+\`/nudgeyt\` - Check all monitored channels
 
 **Finding YouTube Channel IDs:**
 1. Go to the channel page
@@ -255,6 +267,54 @@ client.on('interactionCreate', async (interaction) => {
 **Need more help?** Contact a server admin!
     `;
     await interaction.reply(helpMessage);
+  }
+
+  // Nudge Twitch command
+  if (commandName === 'nudgetwitch') {
+    await interaction.deferReply();
+    
+    if (configWithChannel.twitch.usernames.length === 0) {
+      return interaction.editReply('❌ No Twitch streamers configured to check!');
+    }
+
+    const liveStreams = await twitchMonitor.checkSpecificStreams(configWithChannel.twitch.usernames);
+    
+    if (liveStreams.length === 0) {
+      return interaction.editReply('📴 None of the monitored streamers are currently live.');
+    }
+
+    let response = '🔴 **Currently Live on Twitch:**\n\n';
+    for (const stream of liveStreams) {
+      response += `**${stream.user_name}** - ${stream.title}\n`;
+      response += `Playing: ${stream.game_name}\n`;
+      response += `https://twitch.tv/${stream.user_login}\n\n`;
+    }
+
+    await interaction.editReply(response);
+  }
+
+  // Nudge YouTube command
+  if (commandName === 'nudgeyt') {
+    await interaction.deferReply();
+    
+    if (configWithChannel.youtube.channelIds.length === 0) {
+      return interaction.editReply('❌ No YouTube channels configured to check!');
+    }
+
+    const latestVideos = await youtubeMonitor.checkSpecificChannels(configWithChannel.youtube.channelIds);
+    
+    if (latestVideos.length === 0) {
+      return interaction.editReply('📴 No recent videos found for monitored channels.');
+    }
+
+    let response = '📺 **Latest YouTube Videos:**\n\n';
+    for (const video of latestVideos) {
+      response += `**${video.snippet.channelTitle}**\n`;
+      response += `${video.snippet.title}\n`;
+      response += `https://www.youtube.com/watch?v=${video.id.videoId}\n\n`;
+    }
+
+    await interaction.editReply(response);
   }
 });
 
