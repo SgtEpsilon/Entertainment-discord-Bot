@@ -30,10 +30,10 @@ npm install
 2. Click "New Application" and give it a name
 3. Go to "Bot" section and click "Add Bot"
 4. Under "TOKEN", click "Reset Token" and copy it
-5. Enable "MESSAGE CONTENT INTENT" under Privileged Gateway Intents
+5. Enable "MESSAGE CONTENT INTENT" under Privileged Gateway Intents (required for legacy support)
 6. Go to "OAuth2" > "URL Generator"
-7. Select scopes: `bot`
-8. Select permissions: `Send Messages`, `View Channels`
+7. Select scopes: `bot` and `applications.commands`
+8. Select permissions: `Send Messages`, `View Channels`, `Use Slash Commands`
 9. Copy the generated URL and invite the bot to your server
 
 ### 3. Get Twitch API Credentials
@@ -57,20 +57,27 @@ Fill in your `.env` file with the credentials:
 
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_CHANNEL_ID=your_discord_channel_id
 TWITCH_CLIENT_ID=your_twitch_client_id
 TWITCH_CLIENT_SECRET=your_twitch_client_secret
 YOUTUBE_API_KEY=your_youtube_api_key
 ```
 
+**To get your Discord Channel ID:**
+1. Enable Developer Mode in Discord (User Settings > Advanced > Developer Mode)
+2. Right-click on the channel where you want notifications
+3. Click "Copy Channel ID"
+
 ### 6. Configure config.json
 
 Edit `config.json`:
 
-- **channelId**: Right-click your Discord channel > Copy Channel ID (enable Developer Mode in Discord settings)
 - **twitch.usernames**: Array of Twitch usernames to monitor
 - **youtube.channelIds**: Array of YouTube channel IDs (find in channel URL or About page)
 - **checkInterval**: How often to check (in milliseconds)
 - **message**: Customize notification messages
+
+**Note:** The Discord channel ID is now stored in the `.env` file for better security.
 
 ### 7. Run the Bot
 
@@ -85,6 +92,49 @@ npm start
 - **Customizable Messages**: Configure notification format
 - **Modular Design**: Easy to extend with new platforms
 - **Automatic Token Management**: Handles Twitch OAuth tokens automatically
+- **Easy Commands**: Add/remove streamers without editing config files
+
+## Bot Commands
+
+All commands are now **slash commands** - just type `/` in Discord to see them!
+
+### General Commands
+- `/help` - Display all available commands and usage instructions
+
+### Twitch Commands
+- `/addstreamer <username>` - Add a Twitch streamer to the monitoring list
+- `/removestreamer <username>` - Remove a Twitch streamer from the monitoring list
+- `/liststreamers` - Show all currently monitored streamers
+- `/nudgetwitch` - Check and post all current live streams
+
+**Examples:**
+```
+/addstreamer username:shroud
+/removestreamer username:ninja
+/liststreamers
+/nudgetwitch
+```
+
+### YouTube Commands
+- `/addchannel <channel_id>` - Add a YouTube channel to the monitoring list
+- `/removechannel <channel_id>` - Remove a YouTube channel from the monitoring list
+- `/listchannels` - Show all currently monitored YouTube channels
+- `/nudgeyt` - Check and post all latest videos
+
+**Examples:**
+```
+/addchannel channel_id:UCX6OQ3DkcsbYNE6H8uQQuVA
+/removechannel channel_id:UCX6OQ3DkcsbYNE6H8uQQuVA
+/listchannels
+/nudgeyt
+```
+
+**Finding YouTube Channel IDs:**
+1. Go to the channel page
+2. Click "About" tab
+3. Click "Share Channel" 
+4. The ID is at the end of the URL (starts with "UC")
+   - Or use the channel URL: `youtube.com/channel/UCxxxxxxxxxx`
 
 ## Configuration Options
 
