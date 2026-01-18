@@ -15,29 +15,31 @@ module.exports = {
   },
   
   async execute(interaction, client, config) {
+    await interaction.deferReply();
+    
     const guildConfig = getGuildConfig(interaction.guildId);
     const input = interaction.options.getString('channel').trim();
     
-    // Extract channel ID from various formats
+    // Extract channel ID from various formats (uses RSS validation)
     const channelId = await extractYouTubeChannelId(input);
     
     if (!channelId) {
-      return interaction.reply('❌ Invalid YouTube channel. Please provide a channel URL, @handle, or channel ID.');
+      return interaction.editReply('❌ Invalid YouTube channel. Please provide a channel URL, @handle, or channel ID.');
     }
     
     const index = guildConfig.youtube.channelIds.indexOf(channelId);
     
     if (index === -1) {
-      return interaction.reply(`❌ This channel is not in the monitoring list!`);
+      return interaction.editReply(`❌ This channel is not in the monitoring list!\n\nChannel ID: \`${channelId}\``);
     }
     
     guildConfig.youtube.channelIds.splice(index, 1);
     
     if (saveConfig()) {
-      await interaction.reply(`✅ Removed YouTube channel from the monitoring list!`);
+      await interaction.editReply(`✅ Removed YouTube channel from the monitoring list!\n\nChannel ID: \`${channelId}\`\nRemaining channels: ${guildConfig.youtube.channelIds.length}`);
       console.log(`Guild ${interaction.guildId} removed ${channelId} from YouTube monitoring`);
     } else {
-      await interaction.reply('❌ Error saving configuration. Please try again.');
+      await interaction.editReply('❌ Error saving configuration. Please try again.');
     }
   }
 };
