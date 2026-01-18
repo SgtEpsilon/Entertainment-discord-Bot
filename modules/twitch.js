@@ -1,12 +1,13 @@
 // modules/twitch.js
 const axios = require('axios');
+const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 
 class TwitchMonitor {
   constructor(client, config) {
     this.client = client;
     this.config = config;
     this.accessToken = null;
-    this.liveStreams = new Map(); // Map of guildId -> Set of live streamers
+    this.liveStreamers = new Map(); // Map of guildId -> Set of live streamers
   }
 
   async getAccessToken() {
@@ -18,16 +19,20 @@ class TwitchMonitor {
           grant_type: 'client_credentials'
         }
       });
+      
       this.accessToken = response.data.access_token;
       console.log('Twitch access token obtained');
+      return this.accessToken;
     } catch (error) {
       console.error('Error getting Twitch access token:', error.message);
+      return null;
     }
   }
 
   async checkStreams() {
     if (!this.accessToken) {
       await this.getAccessToken();
+      if (!this.accessToken) return;
     }
 
     // Check streams for each guild
@@ -36,39 +41,45 @@ class TwitchMonitor {
         continue;
       }
 
-      // Initialize live streams set for this guild if it doesn't exist
-      if (!this.liveStreams.has(guildId)) {
-        this.liveStreams.set(guildId, new Set());
+      // Initialize live streamers set for this guild if it doesn't exist
+      if (!this.liveStreamers.has(guildId)) {
+        this.liveStreamers.set(guildId, new Map());
       }
 
-      const guildLiveStreams = this.liveStreams.get(guildId);
+      const liveMap = this.liveStreamers.get(guildId);
 
       for (const username of guildConfig.twitch.usernames) {
         try {
           const response = await axios.get('https://api.twitch.tv/helix/streams', {
+            params: { user_login: username },
             headers: {
               'Client-ID': process.env.TWITCH_CLIENT_ID,
               'Authorization': `Bearer ${this.accessToken}`
-            },
-            params: {
-              user_login: username
             }
           });
 
           const stream = response.data.data[0];
-          const streamKey = username;
 
-          if (stream && !guildLiveStreams.has(streamKey)) {
-            // Stream just went live
-            guildLiveStreams.add(streamKey);
-            await this.sendNotification(stream, guildId, guildConfig);
-          } else if (!stream && guildLiveStreams.has(streamKey)) {
-            // Stream went offline
-            guildLiveStreams.delete(streamKey);
+          if (stream && stream.type === 'live') {
+            // Streamer is live
+            const currentGameId = stream.game_id;
+            const lastNotification = liveMap.get(username);
+
+            // Send notification if:
+            // 1. First time going live (no previous notification)
+            // 2. Game changed (different game_id)
+            if (!lastNotification || lastNotification.game_id !== currentGameId) {
+              liveMap.set(username, { game_id: currentGameId });
+              await this.sendNotification(stream, guildId, guildConfig);
+            }
+          } else {
+            // Streamer is offline
+            liveMap.delete(username);
           }
         } catch (error) {
           if (error.response?.status === 401) {
-            // Token expired, get new one
+            // Token expired, get a new one
+            console.log('Twitch token expired, refreshing...');
             await this.getAccessToken();
           } else {
             console.error(`Error checking Twitch stream for ${username}:`, error.message);
@@ -86,23 +97,67 @@ class TwitchMonitor {
         return;
       }
 
-      const message = guildConfig.twitch.message
-        .replace('{username}', stream.user_name)
-        .replace('{title}', stream.title)
-        .replace('{game}', stream.game_name);
-
-      const streamUrl = `https://twitch.tv/${stream.user_login}`;
+      const username = stream.user_login;
       
-      await channel.send(`${message}\n${streamUrl}`);
-      console.log(`Sent Twitch notification for ${stream.user_name} to guild ${guildId}`);
+      // Check if there's a custom message for this streamer
+      let messageText = guildConfig.twitch.message; // Default message
+      
+      if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
+        messageText = guildConfig.twitch.customMessages[username];
+      }
+
+      // Replace placeholders in custom/default message
+      messageText = messageText
+        .replace(/{username}/g, stream.user_name)
+        .replace(/{title}/g, stream.title)
+        .replace(/{game}/g, stream.game_name || 'Unknown')
+        .replace(/{url}/g, `https://twitch.tv/${stream.user_login}`);
+
+      // Create embed with stream preview
+      const embed = new EmbedBuilder()
+        .setColor('#9146FF') // Twitch purple
+        .setTitle(stream.title || 'Untitled Stream')
+        .setURL(`https://twitch.tv/${stream.user_login}`)
+        .setAuthor({
+          name: `${stream.user_name} is now live on Twitch!`,
+          iconURL: 'https://cdn.discordapp.com/attachments/your-attachment-id/twitch-icon.png',
+          url: `https://twitch.tv/${stream.user_login}`
+        })
+        .setDescription(`**Playing ${stream.game_name || 'Unknown'}**`)
+        .setImage(stream.thumbnail_url.replace('{width}', '1920').replace('{height}', '1080') + `?t=${Date.now()}`)
+        .addFields(
+          { name: '👁️ Viewers', value: stream.viewer_count.toLocaleString(), inline: true },
+          { name: '🎮 Category', value: stream.game_name || 'Unknown', inline: true }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'Twitch' });
+
+      // Create "Watch Now" button
+      const button = new ButtonBuilder()
+        .setLabel('Watch Now')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`https://twitch.tv/${stream.user_login}`)
+        .setEmoji('🔴');
+
+      const row = new ActionRowBuilder().addComponents(button);
+
+      // Send message with embed and button
+      await channel.send({
+        content: messageText,
+        embeds: [embed],
+        components: [row]
+      });
+
+      console.log(`Sent Twitch notification for ${stream.user_name} to guild ${guildId}${guildConfig.twitch.customMessages?.[username] ? ' (custom message)' : ''}`);
     } catch (error) {
       console.error(`Error sending notification to guild ${guildId}:`, error.message);
     }
   }
 
-  async checkSpecificStreams(usernames) {
+  async checkSpecificStreamers(usernames) {
     if (!this.accessToken) {
       await this.getAccessToken();
+      if (!this.accessToken) return [];
     }
 
     const liveStreams = [];
@@ -110,25 +165,19 @@ class TwitchMonitor {
     for (const username of usernames) {
       try {
         const response = await axios.get('https://api.twitch.tv/helix/streams', {
+          params: { user_login: username },
           headers: {
             'Client-ID': process.env.TWITCH_CLIENT_ID,
             'Authorization': `Bearer ${this.accessToken}`
-          },
-          params: {
-            user_login: username
           }
         });
 
         const stream = response.data.data[0];
-        if (stream) {
+        if (stream && stream.type === 'live') {
           liveStreams.push(stream);
         }
       } catch (error) {
-        if (error.response?.status === 401) {
-          await this.getAccessToken();
-        } else {
-          console.error(`Error checking stream for ${username}:`, error.message);
-        }
+        console.error(`Error checking Twitch stream for ${username}:`, error.message);
       }
     }
 
@@ -137,6 +186,7 @@ class TwitchMonitor {
 
   start() {
     console.log('Starting Twitch monitor...');
+    this.getAccessToken();
     this.checkStreams(); // Check immediately
     this.interval = setInterval(() => this.checkStreams(), 60000); // Check every minute
   }

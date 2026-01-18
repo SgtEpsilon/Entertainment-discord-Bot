@@ -1,6 +1,10 @@
 // commands/listchannels.js
 const { getGuildConfig } = require('../utils/config');
 const axios = require('axios');
+const { parseString } = require('xml2js');
+const util = require('util');
+
+const parseXML = util.promisify(parseString);
 
 module.exports = {
   data: {
@@ -17,31 +21,29 @@ module.exports = {
     
     await interaction.deferReply();
     
-    // Fetch channel details from YouTube API
+    // Fetch channel details from RSS feeds
     const channelDetails = [];
     
     for (const channelId of guildConfig.youtube.channelIds) {
       try {
-        const response = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-          params: {
-            part: 'snippet',
-            id: channelId,
-            key: process.env.YOUTUBE_API_KEY
-          }
-        });
+        // Use RSS feed to get channel info
+        const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+        const response = await axios.get(rssUrl, { timeout: 5000 });
+        const result = await parseXML(response.data);
         
-        if (response.data.items && response.data.items.length > 0) {
-          const channel = response.data.items[0];
-          const customUrl = channel.snippet.customUrl;
+        if (result.feed && result.feed.author && result.feed.author[0]) {
+          const channelTitle = result.feed.author[0].name[0];
+          const channelUri = result.feed.author[0].uri[0];
+          
           channelDetails.push({
-            title: channel.snippet.title,
-            customUrl: customUrl,
+            title: channelTitle,
+            url: channelUri,
             channelId: channelId
           });
         } else {
           channelDetails.push({
             title: 'Unknown Channel',
-            customUrl: null,
+            url: `https://youtube.com/channel/${channelId}`,
             channelId: channelId
           });
         }
@@ -49,7 +51,7 @@ module.exports = {
         console.error(`Error fetching channel info for ${channelId}:`, error.message);
         channelDetails.push({
           title: 'Error fetching channel',
-          customUrl: null,
+          url: `https://youtube.com/channel/${channelId}`,
           channelId: channelId
         });
       }
@@ -59,14 +61,11 @@ module.exports = {
     let response = '📋 **Currently monitoring YouTube channels:**\n\n';
     channelDetails.forEach((channel, index) => {
       response += `${index + 1}. **${channel.title}**\n`;
-      if (channel.customUrl) {
-        response += `   ${channel.customUrl}\n`;
-        response += `   https://youtube.com/${channel.customUrl}\n`;
-      } else {
-        response += `   https://youtube.com/channel/${channel.channelId}\n`;
-      }
-      response += '\n';
+      response += `   ${channel.url}\n`;
+      response += `   Channel ID: \`${channel.channelId}\`\n\n`;
     });
+    
+    response += `_Total: ${channelDetails.length} channel(s)_`;
     
     await interaction.editReply(response);
   }

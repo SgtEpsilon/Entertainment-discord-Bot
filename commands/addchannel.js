@@ -18,7 +18,7 @@ module.exports = {
     const guildConfig = getGuildConfig(interaction.guildId);
     const input = interaction.options.getString('channel').trim();
     
-    // Extract channel ID from various formats
+    // Extract channel ID from various formats (now using RSS feed validation)
     const channelId = await extractYouTubeChannelId(input);
     
     if (!channelId) {
@@ -32,7 +32,7 @@ module.exports = {
     guildConfig.youtube.channelIds.push(channelId);
     
     if (saveConfig()) {
-      await interaction.reply(`✅ Added YouTube channel to the monitoring list!\nChannel ID: ${channelId}`);
+      await interaction.reply(`✅ Added YouTube channel to the monitoring list!\nChannel ID: \`${channelId}\`\n\nThe bot will check for new videos every 5 minutes.`);
       console.log(`Guild ${interaction.guildId} added ${channelId} to YouTube monitoring`);
     } else {
       await interaction.reply('❌ Error saving configuration. Please try again.');
