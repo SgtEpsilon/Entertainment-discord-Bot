@@ -1,0 +1,15 @@
+{
+  "discord": {
+    "channelId": "YOUR_DISCORD_CHANNEL_ID"
+  },
+  "twitch": {
+    "usernames": ["streamer1", "streamer2"],
+    "checkInterval": 60000,
+    "message": "🔴 {username} is now live on Twitch!\n**{title}**\nPlaying: {game}"
+  },
+  "youtube": {
+    "channelIds": ["UC_channel_id_1", "UC_channel_id_2"],
+    "checkInterval": 300000,
+    "message": "📺 {channel} just uploaded a new video!\n**{title}**"
+  }
+}
