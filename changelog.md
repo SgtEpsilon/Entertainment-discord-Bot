@@ -22,6 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for placeholders: `{username}`, `{title}`, `{game}`, `{url}`
   - Falls back to default message if not set
   - Stored in `guildConfig.twitch.customMessages` object
+- **Rich Twitch Stream Embeds**: Beautiful visual notifications for live streams
+  - Large 1080p stream preview thumbnail
+  - Twitch purple branding (#9146FF)
+  - Stream title as clickable link
+  - "Playing [GAME]" displayed prominently in description
+  - Viewer count and category fields
+  - Timestamp footer
+- **"Watch Now" Button**: Direct link button on all Twitch notifications
+  - Red circle emoji (🔴) for visual appeal
+  - Styled as Discord link button
+  - One-click access to stream
+- **Smart Game Change Detection**: Only sends new notification when streamer changes game
+  - Prevents notification spam during long streams
+  - Tracks game_id per streamer per guild
+  - Notifies on initial go-live and game switches
 - **Enhanced Twitch Validation**: Username validation before adding to monitoring list
   - Checks if Twitch user exists before adding
   - Validates username format (4-25 chars, alphanumeric + underscore)
@@ -47,19 +62,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `commands/removechannel.js`: Uses RSS validation with deferred replies
   - `commands/listchannels.js`: Fetches channel info from RSS feeds
 - **Twitch Commands**:
-  - `commands/addstreamer.js`: Now uses Discord modals with validation
-  - Added custom message support
+  - `commands/addstreamer.js`: Now uses Discord modals with validation and custom messages
+  - `commands/nudgetwitch.js`: Updated to use rich embeds with stream previews
   - Uses deferred replies to prevent timeout
 - **Twitch Monitoring** (`modules/twitch.js`):
+  - Complete visual overhaul with Discord embeds
+  - Switched from Set-based tracking to Map-based tracking with game_id
+  - Now sends embeds with stream preview images instead of plain text
+  - Added "Watch Now" button component to all notifications
+  - Only triggers new notification on go-live or game change
   - Added support for per-streamer custom messages
-  - Enhanced notification system to check for custom messages
-  - Improved logging with custom message indicators
+  - Enhanced notification system with viewer count and category fields
+  - Improved logging with custom message and game change indicators
 
 ### Fixed
 - YouTube API 403 quota exceeded errors (eliminated by switching to RSS)
 - Twitch 400 errors for non-existent users (now validated before adding)
 - Modal timeout issues with deferred replies
 - Missing validation for malformed Twitch usernames
+- `nudgetwitch` command error: "checkSpecificStreams is not a function"
+- Notification spam during long streams (now only notifies on game changes)
 
 ### Technical Details
 - Added dependency: `xml2js` for RSS feed parsing

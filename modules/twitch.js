@@ -1,5 +1,6 @@
 // modules/twitch.js
 const axios = require('axios');
+const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 
 class TwitchMonitor {
   constructor(client, config) {
@@ -42,10 +43,10 @@ class TwitchMonitor {
 
       // Initialize live streamers set for this guild if it doesn't exist
       if (!this.liveStreamers.has(guildId)) {
-        this.liveStreamers.set(guildId, new Set());
+        this.liveStreamers.set(guildId, new Map());
       }
 
-      const liveSet = this.liveStreamers.get(guildId);
+      const liveMap = this.liveStreamers.get(guildId);
 
       for (const username of guildConfig.twitch.usernames) {
         try {
@@ -61,14 +62,19 @@ class TwitchMonitor {
 
           if (stream && stream.type === 'live') {
             // Streamer is live
-            if (!liveSet.has(username)) {
-              // New stream detected
-              liveSet.add(username);
+            const currentGameId = stream.game_id;
+            const lastNotification = liveMap.get(username);
+
+            // Send notification if:
+            // 1. First time going live (no previous notification)
+            // 2. Game changed (different game_id)
+            if (!lastNotification || lastNotification.game_id !== currentGameId) {
+              liveMap.set(username, { game_id: currentGameId });
               await this.sendNotification(stream, guildId, guildConfig);
             }
           } else {
             // Streamer is offline
-            liveSet.delete(username);
+            liveMap.delete(username);
           }
         } catch (error) {
           if (error.response?.status === 401) {
@@ -94,20 +100,54 @@ class TwitchMonitor {
       const username = stream.user_login;
       
       // Check if there's a custom message for this streamer
-      let messageTemplate = guildConfig.twitch.message; // Default message
+      let messageText = guildConfig.twitch.message; // Default message
       
       if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
-        messageTemplate = guildConfig.twitch.customMessages[username];
+        messageText = guildConfig.twitch.customMessages[username];
       }
 
-      // Replace placeholders
-      const message = messageTemplate
+      // Replace placeholders in custom/default message
+      messageText = messageText
         .replace(/{username}/g, stream.user_name)
         .replace(/{title}/g, stream.title)
         .replace(/{game}/g, stream.game_name || 'Unknown')
         .replace(/{url}/g, `https://twitch.tv/${stream.user_login}`);
 
-      await channel.send(message);
+      // Create embed with stream preview
+      const embed = new EmbedBuilder()
+        .setColor('#9146FF') // Twitch purple
+        .setTitle(stream.title || 'Untitled Stream')
+        .setURL(`https://twitch.tv/${stream.user_login}`)
+        .setAuthor({
+          name: `${stream.user_name} is now live on Twitch!`,
+          iconURL: 'https://cdn.discordapp.com/attachments/your-attachment-id/twitch-icon.png',
+          url: `https://twitch.tv/${stream.user_login}`
+        })
+        .setDescription(`**Playing ${stream.game_name || 'Unknown'}**`)
+        .setImage(stream.thumbnail_url.replace('{width}', '1920').replace('{height}', '1080') + `?t=${Date.now()}`)
+        .addFields(
+          { name: '👁️ Viewers', value: stream.viewer_count.toLocaleString(), inline: true },
+          { name: '🎮 Category', value: stream.game_name || 'Unknown', inline: true }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'Twitch' });
+
+      // Create "Watch Now" button
+      const button = new ButtonBuilder()
+        .setLabel('Watch Now')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`https://twitch.tv/${stream.user_login}`)
+        .setEmoji('🔴');
+
+      const row = new ActionRowBuilder().addComponents(button);
+
+      // Send message with embed and button
+      await channel.send({
+        content: messageText,
+        embeds: [embed],
+        components: [row]
+      });
+
       console.log(`Sent Twitch notification for ${stream.user_name} to guild ${guildId}${guildConfig.twitch.customMessages?.[username] ? ' (custom message)' : ''}`);
     } catch (error) {
       console.error(`Error sending notification to guild ${guildId}:`, error.message);
