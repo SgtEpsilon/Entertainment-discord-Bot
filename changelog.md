@@ -5,7 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [BETA 0.0.5]
+## [Unreleased]
+
+## [BETA 0.0.6] - 2026-01-18
+
+### Added
+- **YouTube RSS Feed Support**: Switched from YouTube API to RSS feeds for quota-free monitoring
+  - No API key required for YouTube functionality
+  - Unlimited checks without quota limits
+  - Faster response times with simpler XML parsing
+- **Discord Modal Forms**: Interactive forms for `/addstreamer` command
+  - User-friendly popup interface for adding streamers
+  - Optional custom notification message per streamer
+  - Real-time validation and error handling
+- **Custom Per-Streamer Notifications**: Personalized messages for individual Twitch streamers
+  - Support for placeholders: `{username}`, `{title}`, `{game}`, `{url}`
+  - Falls back to default message if not set
+  - Stored in `guildConfig.twitch.customMessages` object
+- **Enhanced Twitch Validation**: Username validation before adding to monitoring list
+  - Checks if Twitch user exists before adding
+  - Validates username format (4-25 chars, alphanumeric + underscore)
+  - Clear error messages for invalid usernames
+- **YouTube Channel Validation**: RSS-based channel verification
+  - Validates channel IDs using RSS feeds
+  - Resolves @handles to channel IDs via web scraping
+  - Supports multiple URL formats (channel/, @handle, /user/, /c/)
+- Debug logging throughout YouTube and Twitch modules
+- Enhanced error messages with troubleshooting hints
+
+### Changed
+- **YouTube Monitoring System** (`modules/youtube.js`):
+  - Complete rewrite to use RSS feeds instead of YouTube Data API v3
+  - Removed API key dependency
+  - Added `xml2js` package for XML parsing
+- **YouTube Utility Functions** (`utils/youtube.js`):
+  - Updated `extractYouTubeChannelId()` to use RSS validation
+  - Added `validateChannelId()` for RSS-based verification
+  - Added `resolveHandleToChannelId()` for @handle resolution
+- **YouTube Commands**: All YouTube commands now use RSS feeds
+  - `commands/addchannel.js`: Uses RSS validation
+  - `commands/removechannel.js`: Uses RSS validation with deferred replies
+  - `commands/listchannels.js`: Fetches channel info from RSS feeds
+- **Twitch Commands**:
+  - `commands/addstreamer.js`: Now uses Discord modals with validation
+  - Added custom message support
+  - Uses deferred replies to prevent timeout
+- **Twitch Monitoring** (`modules/twitch.js`):
+  - Added support for per-streamer custom messages
+  - Enhanced notification system to check for custom messages
+  - Improved logging with custom message indicators
+
+### Fixed
+- YouTube API 403 quota exceeded errors (eliminated by switching to RSS)
+- Twitch 400 errors for non-existent users (now validated before adding)
+- Modal timeout issues with deferred replies
+- Missing validation for malformed Twitch usernames
+
+### Technical Details
+- Added dependency: `xml2js` for RSS feed parsing
+- Removed dependency: YouTube API key no longer required
+- Improved error handling across all YouTube operations
+- Better user feedback with detailed error messages
+
+---
+
+## [BETA 0.0.5] - 2026-01-18
 
 ### Added
 - Automatic guild configuration cleanup when bot is removed from a server
