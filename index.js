@@ -27,6 +27,12 @@ const readyEvent = client.events?.ready ? 'clientReady' : 'ready';
 client.once(readyEvent, async () => {
   console.log(`Logged in as ${client.user.tag}`);
   
+  // Validate Discord channel ID
+  if (!process.env.DISCORD_CHANNEL_ID) {
+    console.error('ERROR: DISCORD_CHANNEL_ID is not set in .env file!');
+    process.exit(1);
+  }
+  
   // Register slash commands
   const commands = [
     {
@@ -91,15 +97,22 @@ client.once(readyEvent, async () => {
     console.error('Error registering slash commands:', error);
   }
   
-  // Initialize monitors
-  twitchMonitor = new TwitchMonitor(client, config);
-  youtubeMonitor = new YouTubeMonitor(client, config);
+  // Initialize monitors with channel ID from .env
+  const configWithChannel = {
+    ...config,
+    discord: { channelId: process.env.DISCORD_CHANNEL_ID }
+  };
+  
+  twitchMonitor = new TwitchMonitor(client, configWithChannel);
+  youtubeMonitor = new YouTubeMonitor(client, configWithChannel);
   
   // Start monitoring
   twitchMonitor.start();
   youtubeMonitor.start();
   
   console.log('Bot is now monitoring streams and videos!');
+  console.log(`Notifications will be sent to channel: ${process.env.DISCORD_CHANNEL_ID}`);
+});
 });
 
 // Handle slash commands

@@ -1,7 +1,4 @@
 {
-  "discord": {
-    "channelId": "YOUR_DISCORD_CHANNEL_ID"
-  },
   "twitch": {
     "usernames": ["streamer1", "streamer2"],
     "checkInterval": 60000,

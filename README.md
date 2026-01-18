@@ -57,20 +57,27 @@ Fill in your `.env` file with the credentials:
 
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_CHANNEL_ID=your_discord_channel_id
 TWITCH_CLIENT_ID=your_twitch_client_id
 TWITCH_CLIENT_SECRET=your_twitch_client_secret
 YOUTUBE_API_KEY=your_youtube_api_key
 ```
 
+**To get your Discord Channel ID:**
+1. Enable Developer Mode in Discord (User Settings > Advanced > Developer Mode)
+2. Right-click on the channel where you want notifications
+3. Click "Copy Channel ID"
+
 ### 6. Configure config.json
 
 Edit `config.json`:
 
-- **channelId**: Right-click your Discord channel > Copy Channel ID (enable Developer Mode in Discord settings)
 - **twitch.usernames**: Array of Twitch usernames to monitor
 - **youtube.channelIds**: Array of YouTube channel IDs (find in channel URL or About page)
 - **checkInterval**: How often to check (in milliseconds)
 - **message**: Customize notification messages
+
+**Note:** The Discord channel ID is now stored in the `.env` file for better security.
 
 ### 7. Run the Bot
 
