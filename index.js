@@ -6,6 +6,7 @@ const path = require('path');
 const config = require('./config.json');
 const TwitchMonitor = require('./modules/twitch');
 const YouTubeMonitor = require('./modules/youtube');
+const { getGuildConfig, saveConfig, deleteGuildConfig } = require('./utils/config');
 
 // Support both discord.js v13 and v14+
 const client = new Discord.Client({
@@ -96,6 +97,16 @@ client.on('interactionCreate', async (interaction) => {
     } else {
       await interaction.reply({ content: errorMessage, ephemeral: true });
     }
+  }
+});
+
+// Handle bot removal from guild - delete config
+client.on('guildDelete', async (guild) => {
+  const deleted = deleteGuildConfig(guild.id);
+  if (deleted) {
+    console.log(`✅ Bot removed from guild: ${guild.name} (${guild.id}). Config deleted.`);
+  } else {
+    console.log(`⚠️ Bot removed from guild: ${guild.name} (${guild.id}). No config found.`);
   }
 });
 

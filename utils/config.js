@@ -34,7 +34,18 @@ function saveConfig() {
   }
 }
 
+// Delete guild configuration when bot is removed
+function deleteGuildConfig(guildId) {
+  if (config.guilds[guildId]) {
+    delete config.guilds[guildId];
+    saveConfig();
+    return true;
+  }
+  return false;
+}
+
 module.exports = {
   getGuildConfig,
-  saveConfig
+  saveConfig,
+  deleteGuildConfig
 };
