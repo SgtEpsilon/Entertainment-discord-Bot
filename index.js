@@ -24,17 +24,126 @@ let youtubeMonitor;
 // Use clientReady for v14.16+, fallback to ready for older versions
 const readyEvent = client.events?.ready ? 'clientReady' : 'ready';
 
+// Helper function to get guild config
+function getGuildConfig(guildId) {
+  if (!config.guilds[guildId]) {
+    config.guilds[guildId] = {
+      channelId: null,
+      twitch: {
+        usernames: [],
+        checkInterval: 60000,
+        message: "🔴 {username} is now live on Twitch!\n**{title}**\nPlaying: {game}"
+      },
+      youtube: {
+        channelIds: [],
+        checkInterval: 300000,
+        message: "📺 {channel} just uploaded a new video!\n**{title}**"
+      }
+    };
+    saveConfig();
+  }
+  return config.guilds[guildId];
+}
+
+// Helper function to save config
+function saveConfig() {
+  try {
+    fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Error saving config:', error);
+    return false;
+  }
+}
+
+// Helper function to extract YouTube channel ID from various formats
+async function extractYouTubeChannelId(input) {
+  const axios = require('axios');
+  
+  // If it's already a channel ID (UC... format)
+  if (input.startsWith('UC') && input.length === 24) {
+    return input;
+  }
+  
+  // If it's a @handle
+  if (input.startsWith('@')) {
+    const handle = input.substring(1); // Remove @
+    try {
+      const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+        params: {
+          part: 'snippet',
+          q: input,
+          type: 'channel',
+          maxResults: 1,
+          key: process.env.YOUTUBE_API_KEY
+        }
+      });
+      
+      if (response.data.items && response.data.items.length > 0) {
+        return response.data.items[0].snippet.channelId;
+      }
+    } catch (error) {
+      console.error('Error looking up YouTube handle:', error.message);
+      return null;
+    }
+  }
+  
+  // If it's a URL
+  if (input.includes('youtube.com') || input.includes('youtu.be')) {
+    // Extract from youtube.com/channel/UC...
+    const channelMatch = input.match(/youtube\.com\/channel\/(UC[\w-]{22})/);
+    if (channelMatch) {
+      return channelMatch[1];
+    }
+    
+    // Extract from youtube.com/@handle or youtube.com/c/... or youtube.com/user/...
+    const handleMatch = input.match(/youtube\.com\/@([\w-]+)/);
+    const cMatch = input.match(/youtube\.com\/c\/([\w-]+)/);
+    const userMatch = input.match(/youtube\.com\/user\/([\w-]+)/);
+    
+    const username = handleMatch?.[1] || cMatch?.[1] || userMatch?.[1];
+    
+    if (username) {
+      try {
+        // Try to get channel ID from username/handle
+        const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+          params: {
+            part: 'snippet',
+            q: username,
+            type: 'channel',
+            maxResults: 1,
+            key: process.env.YOUTUBE_API_KEY
+          }
+        });
+        
+        if (response.data.items && response.data.items.length > 0) {
+          return response.data.items[0].snippet.channelId;
+        }
+      } catch (error) {
+        console.error('Error looking up YouTube channel:', error.message);
+        return null;
+      }
+    }
+  }
+  
+  return null;
+}
+
 client.once(readyEvent, async () => {
   console.log(`Logged in as ${client.user.tag}`);
   
-  // Validate Discord channel ID
-  if (!process.env.DISCORD_CHANNEL_ID) {
-    console.error('ERROR: DISCORD_CHANNEL_ID is not set in .env file!');
-    process.exit(1);
-  }
-  
   // Register slash commands
   const commands = [
+    {
+      name: 'setup',
+      description: 'Set the notification channel for this server',
+      options: [{
+        name: 'channel',
+        description: 'The channel to send notifications to',
+        type: 7, // CHANNEL type
+        required: true
+      }]
+    },
     {
       name: 'addstreamer',
       description: 'Add a Twitch streamer to the monitoring list',
@@ -63,8 +172,8 @@ client.once(readyEvent, async () => {
       name: 'addchannel',
       description: 'Add a YouTube channel to the monitoring list',
       options: [{
-        name: 'channel_id',
-        description: 'YouTube channel ID (starts with UC)',
+        name: 'channel',
+        description: 'YouTube channel URL, @handle, or channel ID (UC...)',
         type: 3,
         required: true
       }]
@@ -73,8 +182,8 @@ client.once(readyEvent, async () => {
       name: 'removechannel',
       description: 'Remove a YouTube channel from the monitoring list',
       options: [{
-        name: 'channel_id',
-        description: 'YouTube channel ID',
+        name: 'channel',
+        description: 'YouTube channel URL, @handle, or channel ID (UC...)',
         type: 3,
         required: true
       }]
@@ -105,46 +214,57 @@ client.once(readyEvent, async () => {
     console.error('Error registering slash commands:', error);
   }
   
-  // Initialize monitors with channel ID from .env
-  const configWithChannel = {
-    ...config,
-    discord: { channelId: process.env.DISCORD_CHANNEL_ID }
-  };
-  
-  twitchMonitor = new TwitchMonitor(client, configWithChannel);
-  youtubeMonitor = new YouTubeMonitor(client, configWithChannel);
+  // Initialize monitors
+  twitchMonitor = new TwitchMonitor(client, config);
+  youtubeMonitor = new YouTubeMonitor(client, config);
   
   // Start monitoring
   twitchMonitor.start();
   youtubeMonitor.start();
   
   console.log('Bot is now monitoring streams and videos!');
-  console.log(`Notifications will be sent to channel: ${process.env.DISCORD_CHANNEL_ID}`);
-});
+  console.log(`Configured for ${Object.keys(config.guilds).length} guild(s)`);
 });
 
 // Handle slash commands
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  const { commandName, options } = interaction;
+  const { commandName, options, guildId } = interaction;
+  const guildConfig = getGuildConfig(guildId);
+
+  // Setup command
+  if (commandName === 'setup') {
+    const channel = options.getChannel('channel');
+    
+    if (!channel.isTextBased()) {
+      return interaction.reply('❌ Please select a text channel!');
+    }
+    
+    guildConfig.channelId = channel.id;
+    
+    if (saveConfig()) {
+      await interaction.reply(`✅ Notification channel set to ${channel}!`);
+      console.log(`Guild ${guildId} set channel to ${channel.id}`);
+    } else {
+      await interaction.reply('❌ Error saving configuration. Please try again.');
+    }
+  }
 
   // Add Twitch streamer
   if (commandName === 'addstreamer') {
     const username = options.getString('username').toLowerCase();
     
-    if (config.twitch.usernames.includes(username)) {
+    if (guildConfig.twitch.usernames.includes(username)) {
       return interaction.reply(`❌ **${username}** is already being monitored!`);
     }
     
-    config.twitch.usernames.push(username);
+    guildConfig.twitch.usernames.push(username);
     
-    try {
-      fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+    if (saveConfig()) {
       await interaction.reply(`✅ Added **${username}** to the monitoring list!`);
-      console.log(`Added ${username} to Twitch monitoring`);
-    } catch (error) {
-      console.error('Error saving config:', error);
+      console.log(`Guild ${guildId} added ${username} to Twitch monitoring`);
+    } else {
       await interaction.reply('❌ Error saving configuration. Please try again.');
     }
   }
@@ -152,87 +272,169 @@ client.on('interactionCreate', async (interaction) => {
   // Remove Twitch streamer
   if (commandName === 'removestreamer') {
     const username = options.getString('username').toLowerCase();
-    const index = config.twitch.usernames.indexOf(username);
+    const index = guildConfig.twitch.usernames.indexOf(username);
     
     if (index === -1) {
       return interaction.reply(`❌ **${username}** is not in the monitoring list!`);
     }
     
-    config.twitch.usernames.splice(index, 1);
+    guildConfig.twitch.usernames.splice(index, 1);
     
-    try {
-      fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+    if (saveConfig()) {
       await interaction.reply(`✅ Removed **${username}** from the monitoring list!`);
-      console.log(`Removed ${username} from Twitch monitoring`);
-    } catch (error) {
-      console.error('Error saving config:', error);
+      console.log(`Guild ${guildId} removed ${username} from Twitch monitoring`);
+    } else {
       await interaction.reply('❌ Error saving configuration. Please try again.');
     }
   }
 
   // List Twitch streamers
   if (commandName === 'liststreamers') {
-    if (config.twitch.usernames.length === 0) {
+    if (guildConfig.twitch.usernames.length === 0) {
       return interaction.reply('📋 No streamers are currently being monitored.');
     }
     
-    const list = config.twitch.usernames.map((u, i) => `${i + 1}. ${u}`).join('\n');
+    const list = guildConfig.twitch.usernames.map((u, i) => `${i + 1}. ${u}`).join('\n');
     await interaction.reply(`📋 **Currently monitoring:**\n${list}`);
   }
 
   // Add YouTube channel
   if (commandName === 'addchannel') {
-    const channelId = options.getString('channel_id');
+    const input = options.getString('channel').trim();
     
-    if (!channelId.startsWith('UC') || channelId.length !== 24) {
-      return interaction.reply('❌ Invalid YouTube channel ID format. It should start with "UC" and be 24 characters long.');
+    // Extract channel ID from various formats
+    let channelId = await extractYouTubeChannelId(input);
+    
+    if (!channelId) {
+      return interaction.reply('❌ Invalid YouTube channel. Please provide a channel URL (youtube.com/channel/... or youtube.com/@...), @handle, or channel ID (UC...).');
     }
     
-    if (config.youtube.channelIds.includes(channelId)) {
+    if (guildConfig.youtube.channelIds.includes(channelId)) {
       return interaction.reply(`❌ This channel is already being monitored!`);
     }
     
-    config.youtube.channelIds.push(channelId);
+    guildConfig.youtube.channelIds.push(channelId);
     
-    try {
-      fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
-      await interaction.reply(`✅ Added YouTube channel to the monitoring list!`);
-      console.log(`Added ${channelId} to YouTube monitoring`);
-    } catch (error) {
-      console.error('Error saving config:', error);
+    if (saveConfig()) {
+      await interaction.reply(`✅ Added YouTube channel to the monitoring list!\nChannel ID: ${channelId}`);
+      console.log(`Guild ${guildId} added ${channelId} to YouTube monitoring`);
+    } else {
       await interaction.reply('❌ Error saving configuration. Please try again.');
     }
   }
 
   // Remove YouTube channel
   if (commandName === 'removechannel') {
-    const channelId = options.getString('channel_id');
-    const index = config.youtube.channelIds.indexOf(channelId);
+    const input = options.getString('channel').trim();
+    
+    // Extract channel ID from various formats
+    let channelId = await extractYouTubeChannelId(input);
+    
+    if (!channelId) {
+      return interaction.reply('❌ Invalid YouTube channel. Please provide a channel URL, @handle, or channel ID.');
+    }
+    
+    const index = guildConfig.youtube.channelIds.indexOf(channelId);
     
     if (index === -1) {
       return interaction.reply(`❌ This channel is not in the monitoring list!`);
     }
     
-    config.youtube.channelIds.splice(index, 1);
+    guildConfig.youtube.channelIds.splice(index, 1);
     
-    try {
-      fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+    if (saveConfig()) {
       await interaction.reply(`✅ Removed YouTube channel from the monitoring list!`);
-      console.log(`Removed ${channelId} from YouTube monitoring`);
-    } catch (error) {
-      console.error('Error saving config:', error);
+      console.log(`Guild ${guildId} removed ${channelId} from YouTube monitoring`);
+    } else {
       await interaction.reply('❌ Error saving configuration. Please try again.');
     }
   }
 
   // List YouTube channels
   if (commandName === 'listchannels') {
-    if (config.youtube.channelIds.length === 0) {
+    if (guildConfig.youtube.channelIds.length === 0) {
       return interaction.reply('📋 No YouTube channels are currently being monitored.');
     }
     
-    const list = config.youtube.channelIds.map((id, i) => `${i + 1}. ${id}`).join('\n');
+    const list = guildConfig.youtube.channelIds.map((id, i) => `${i + 1}. ${id}`).join('\n');
     await interaction.reply(`📋 **Currently monitoring YouTube channels:**\n${list}`);
+  }
+
+  // Nudge Twitch command
+  if (commandName === 'nudgetwitch') {
+    await interaction.deferReply();
+    
+    if (!guildConfig.channelId) {
+      return interaction.editReply('❌ Please set up a notification channel first using `/setup`!');
+    }
+    
+    if (guildConfig.twitch.usernames.length === 0) {
+      return interaction.editReply('❌ No Twitch streamers configured to check!');
+    }
+
+    const liveStreams = await twitchMonitor.checkSpecificStreams(guildConfig.twitch.usernames);
+    
+    if (liveStreams.length === 0) {
+      return interaction.editReply('📴 None of the monitored streamers are currently live.');
+    }
+
+    // Post to the designated channel
+    try {
+      const notificationChannel = await client.channels.fetch(guildConfig.channelId);
+      
+      for (const stream of liveStreams) {
+        const message = guildConfig.twitch.message
+          .replace('{username}', stream.user_name)
+          .replace('{title}', stream.title)
+          .replace('{game}', stream.game_name);
+
+        const streamUrl = `https://twitch.tv/${stream.user_login}`;
+        await notificationChannel.send(`${message}\n${streamUrl}`);
+      }
+
+      await interaction.editReply(`✅ Posted ${liveStreams.length} live stream(s) to ${notificationChannel}!`);
+    } catch (error) {
+      console.error('Error posting to channel:', error);
+      await interaction.editReply('❌ Error posting to the notification channel!');
+    }
+  }
+
+  // Nudge YouTube command
+  if (commandName === 'nudgeyt') {
+    await interaction.deferReply();
+    
+    if (!guildConfig.channelId) {
+      return interaction.editReply('❌ Please set up a notification channel first using `/setup`!');
+    }
+    
+    if (guildConfig.youtube.channelIds.length === 0) {
+      return interaction.editReply('❌ No YouTube channels configured to check!');
+    }
+
+    const latestVideos = await youtubeMonitor.checkSpecificChannels(guildConfig.youtube.channelIds);
+    
+    if (latestVideos.length === 0) {
+      return interaction.editReply('📴 No recent videos found for monitored channels.');
+    }
+
+    // Post to the designated channel
+    try {
+      const notificationChannel = await client.channels.fetch(guildConfig.channelId);
+      
+      for (const video of latestVideos) {
+        const message = guildConfig.youtube.message
+          .replace('{channel}', video.snippet.channelTitle)
+          .replace('{title}', video.snippet.title);
+
+        const videoUrl = `https://www.youtube.com/watch?v=${video.id.videoId}`;
+        await notificationChannel.send(`${message}\n${videoUrl}`);
+      }
+
+      await interaction.editReply(`✅ Posted ${latestVideos.length} video(s) to ${notificationChannel}!`);
+    } catch (error) {
+      console.error('Error posting to channel:', error);
+      await interaction.editReply('❌ Error posting to the notification channel!');
+    }
   }
 
   // Help command
@@ -240,81 +442,39 @@ client.on('interactionCreate', async (interaction) => {
     const helpMessage = `
 🤖 **Entertainment Bot - Help Menu**
 
+**Setup:**
+\`/setup <channel>\` - Set the notification channel for this server
+
 **Twitch Commands:**
 \`/addstreamer <username>\` - Add a Twitch streamer to monitor
 \`/removestreamer <username>\` - Remove a Twitch streamer
 \`/liststreamers\` - Show all monitored streamers
-\`/nudgetwitch\` - Check and post current live streams
+\`/nudgetwitch\` - Check for live streams and post to notification channel
 
 **YouTube Commands:**
-\`/addchannel <channel_id>\` - Add a YouTube channel to monitor
-\`/removechannel <channel_id>\` - Remove a YouTube channel
+\`/addchannel <channel>\` - Add a YouTube channel to monitor
+\`/removechannel <channel>\` - Remove a YouTube channel
 \`/listchannels\` - Show all monitored channels
-\`/nudgeyt\` - Check and post latest videos
+\`/nudgeyt\` - Check for latest videos and post to notification channel
 
 **Examples:**
+\`/setup channel:#notifications\`
 \`/addstreamer username:shroud\`
-\`/addchannel channel_id:UCX6OQ3DkcsbYNE6H8uQQuVA\`
-\`/nudgetwitch\` - Check all monitored streamers
-\`/nudgeyt\` - Check all monitored channels
+\`/addchannel channel:@MrBeast\`
+\`/addchannel channel:https://youtube.com/@LinusTechTips\`
+\`/addchannel channel:UCX6OQ3DkcsbYNE6H8uQQuVA\`
+\`/nudgetwitch\` - Posts any live streams to your notification channel
+\`/nudgeyt\` - Posts latest videos to your notification channel
 
-**Finding YouTube Channel IDs:**
-1. Go to the channel page
-2. Click "About" tab
-3. Click "Share Channel"
-4. Copy the ID from the URL (starts with UC)
+**Adding YouTube Channels:**
+You can use any of these formats:
+• \`@handle\` (e.g., @MrBeast)
+• Full URL (e.g., https://youtube.com/@LinusTechTips)
+• Channel ID (e.g., UCX6OQ3DkcsbYNE6H8uQQuVA)
 
-**Need more help?** Contact a server admin!
+**Note:** Each server has its own separate configuration!
     `;
     await interaction.reply(helpMessage);
-  }
-
-  // Nudge Twitch command
-  if (commandName === 'nudgetwitch') {
-    await interaction.deferReply();
-    
-    if (configWithChannel.twitch.usernames.length === 0) {
-      return interaction.editReply('❌ No Twitch streamers configured to check!');
-    }
-
-    const liveStreams = await twitchMonitor.checkSpecificStreams(configWithChannel.twitch.usernames);
-    
-    if (liveStreams.length === 0) {
-      return interaction.editReply('📴 None of the monitored streamers are currently live.');
-    }
-
-    let response = '🔴 **Currently Live on Twitch:**\n\n';
-    for (const stream of liveStreams) {
-      response += `**${stream.user_name}** - ${stream.title}\n`;
-      response += `Playing: ${stream.game_name}\n`;
-      response += `https://twitch.tv/${stream.user_login}\n\n`;
-    }
-
-    await interaction.editReply(response);
-  }
-
-  // Nudge YouTube command
-  if (commandName === 'nudgeyt') {
-    await interaction.deferReply();
-    
-    if (configWithChannel.youtube.channelIds.length === 0) {
-      return interaction.editReply('❌ No YouTube channels configured to check!');
-    }
-
-    const latestVideos = await youtubeMonitor.checkSpecificChannels(configWithChannel.youtube.channelIds);
-    
-    if (latestVideos.length === 0) {
-      return interaction.editReply('📴 No recent videos found for monitored channels.');
-    }
-
-    let response = '📺 **Latest YouTube Videos:**\n\n';
-    for (const video of latestVideos) {
-      response += `**${video.snippet.channelTitle}**\n`;
-      response += `${video.snippet.title}\n`;
-      response += `https://www.youtube.com/watch?v=${video.id.videoId}\n\n`;
-    }
-
-    await interaction.editReply(response);
   }
 });
 

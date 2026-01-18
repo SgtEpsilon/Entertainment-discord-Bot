@@ -57,27 +57,45 @@ Fill in your `.env` file with the credentials:
 
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token
-DISCORD_CHANNEL_ID=your_discord_channel_id
 TWITCH_CLIENT_ID=your_twitch_client_id
 TWITCH_CLIENT_SECRET=your_twitch_client_secret
 YOUTUBE_API_KEY=your_youtube_api_key
 ```
 
-**To get your Discord Channel ID:**
-1. Enable Developer Mode in Discord (User Settings > Advanced > Developer Mode)
-2. Right-click on the channel where you want notifications
-3. Click "Copy Channel ID"
+**Note:** Channel IDs are now configured per-server using the `/setup` command!
 
 ### 6. Configure config.json
 
-Edit `config.json`:
+The bot now uses a **multi-guild configuration**. Each Discord server (guild) gets its own settings.
 
-- **twitch.usernames**: Array of Twitch usernames to monitor
-- **youtube.channelIds**: Array of YouTube channel IDs (find in channel URL or About page)
-- **checkInterval**: How often to check (in milliseconds)
-- **message**: Customize notification messages
+Edit `config.json` to add your server's Guild ID:
 
-**Note:** The Discord channel ID is now stored in the `.env` file for better security.
+```json
+{
+  "guilds": {
+    "YOUR_GUILD_ID": {
+      "channelId": null,
+      "twitch": {
+        "usernames": [],
+        "checkInterval": 60000,
+        "message": "🔴 {username} is now live..."
+      },
+      "youtube": {
+        "channelIds": [],
+        "checkInterval": 300000,
+        "message": "📺 {channel} just uploaded..."
+      }
+    }
+  }
+}
+```
+
+**To get your Guild ID:**
+1. Enable Developer Mode in Discord (User Settings > Advanced > Developer Mode)
+2. Right-click on your server icon
+3. Click "Copy Server ID"
+
+**Note:** You can add multiple guilds to the config. The bot will auto-create entries for new guilds when you use the `/setup` command.
 
 ### 7. Run the Bot
 
@@ -85,11 +103,34 @@ Edit `config.json`:
 npm start
 ```
 
+### 8. First-Time Setup in Discord
+
+Once the bot is running, in each Discord server:
+
+1. Run `/setup channel:#your-channel` to set where notifications will be posted
+2. Use `/addstreamer` and `/addchannel` to add streamers/channels to monitor
+3. Test with `/nudgetwitch` or `/nudgeyt` to see current streams/videos
+
+## Multi-Guild Configuration
+
+The bot supports multiple Discord servers, each with:
+- **Independent notification channels**: Each server sends to its own channel
+- **Separate streamer lists**: Server A can monitor different streamers than Server B
+- **Custom messages**: Each server can have different notification formats
+- **Auto-configuration**: New servers are automatically added when you run `/setup`
+
+**Example:**
+- Server 1 monitors: shroud, pokimane → sends to #live-streams
+- Server 2 monitors: xqc, summit1g → sends to #twitch-alerts
+
 ## Features
 
+- **Multi-Guild Support**: Each Discord server has its own separate configuration
+- **Per-Server Notification Channels**: Set different channels for each server
+- **Independent Streamer Lists**: Each server can monitor different streamers/channels
 - **Twitch Monitoring**: Detects when streamers go live
 - **YouTube Monitoring**: Detects new video uploads
-- **Customizable Messages**: Configure notification format
+- **Customizable Messages**: Configure notification format per server
 - **Modular Design**: Easy to extend with new platforms
 - **Automatic Token Management**: Handles Twitch OAuth tokens automatically
 - **Easy Commands**: Add/remove streamers without editing config files
@@ -98,6 +139,9 @@ npm start
 
 All commands are now **slash commands** - just type `/` in Discord to see them!
 
+### Setup Command
+- `/setup <channel>` - Set the notification channel for this server (required first step!)
+
 ### General Commands
 - `/help` - Display all available commands and usage instructions
 
@@ -105,29 +149,37 @@ All commands are now **slash commands** - just type `/` in Discord to see them!
 - `/addstreamer <username>` - Add a Twitch streamer to the monitoring list
 - `/removestreamer <username>` - Remove a Twitch streamer from the monitoring list
 - `/liststreamers` - Show all currently monitored streamers
-- `/nudgetwitch` - Check and post all current live streams
+- `/nudgetwitch` - Check for live streams and post them to the notification channel
 
 **Examples:**
 ```
 /addstreamer username:shroud
 /removestreamer username:ninja
 /liststreamers
-/nudgetwitch
+/nudgetwitch (posts live streams to your notification channel)
 ```
 
 ### YouTube Commands
-- `/addchannel <channel_id>` - Add a YouTube channel to the monitoring list
-- `/removechannel <channel_id>` - Remove a YouTube channel from the monitoring list
+- `/addchannel <channel>` - Add a YouTube channel to the monitoring list
+- `/removechannel <channel>` - Remove a YouTube channel from the monitoring list
 - `/listchannels` - Show all currently monitored YouTube channels
-- `/nudgeyt` - Check and post all latest videos
+- `/nudgeyt` - Check for latest videos and post them to the notification channel
 
 **Examples:**
 ```
-/addchannel channel_id:UCX6OQ3DkcsbYNE6H8uQQuVA
-/removechannel channel_id:UCX6OQ3DkcsbYNE6H8uQQuVA
+/addchannel channel:@MrBeast
+/addchannel channel:https://youtube.com/@LinusTechTips
+/addchannel channel:UCX6OQ3DkcsbYNE6H8uQQuVA
+/removechannel channel:@MrBeast
 /listchannels
-/nudgeyt
+/nudgeyt (posts latest videos to your notification channel)
 ```
+
+**Supported YouTube Channel Formats:**
+- `@handle` - e.g., `@MrBeast`, `@LinusTechTips`
+- Full URL - e.g., `https://youtube.com/@MrBeast`
+- Channel URL - e.g., `https://youtube.com/channel/UCX6OQ3DkcsbYNE6H8uQQuVA`
+- Channel ID - e.g., `UCX6OQ3DkcsbYNE6H8uQQuVA`
 
 **Finding YouTube Channel IDs:**
 1. Go to the channel page
