@@ -1,45 +1,115 @@
-// commands/removechannel.js
 const { getGuildConfig, saveConfig } = require('../utils/config');
-const { extractYouTubeChannelId } = require('../utils/youtube');
+const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
+const axios = require('axios');
+const { parseString } = require('xml2js');
+const util = require('util');
+
+const parseXML = util.promisify(parseString);
 
 module.exports = {
   data: {
     name: 'removechannel',
-    description: 'Remove a YouTube channel from the monitoring list',
-    options: [{
-      name: 'channel',
-      description: 'YouTube channel URL, @handle, or channel ID (UC...)',
-      type: 3,
-      required: true
-    }]
+    description: 'Remove a YouTube channel from the monitoring list'
   },
   
   async execute(interaction, client, config) {
+    const guildConfig = getGuildConfig(interaction.guildId);
+    
+    if (guildConfig.youtube.channelIds.length === 0) {
+      return interaction.reply('📋 No YouTube channels are currently being monitored.');
+    }
+    
     await interaction.deferReply();
     
-    const guildConfig = getGuildConfig(interaction.guildId);
-    const input = interaction.options.getString('channel').trim();
+    // Fetch channel details for the dropdown
+    const channelOptions = [];
     
-    // Extract channel ID from various formats (uses RSS validation)
-    const channelId = await extractYouTubeChannelId(input);
-    
-    if (!channelId) {
-      return interaction.editReply('❌ Invalid YouTube channel. Please provide a channel URL, @handle, or channel ID.');
+    for (const channelId of guildConfig.youtube.channelIds) {
+      try {
+        const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+        const response = await axios.get(rssUrl, { timeout: 5000 });
+        const result = await parseXML(response.data);
+        
+        let channelTitle = 'Unknown Channel';
+        if (result.feed && result.feed.author && result.feed.author[0]) {
+          channelTitle = result.feed.author[0].name[0];
+        }
+        
+        channelOptions.push(
+          new StringSelectMenuOptionBuilder()
+            .setLabel(channelTitle)
+            .setDescription(channelId)
+            .setValue(channelId)
+        );
+      } catch (error) {
+        console.error(`Error fetching channel info for ${channelId}:`, error.message);
+        channelOptions.push(
+          new StringSelectMenuOptionBuilder()
+            .setLabel('Unknown Channel')
+            .setDescription(channelId)
+            .setValue(channelId)
+        );
+      }
     }
     
-    const index = guildConfig.youtube.channelIds.indexOf(channelId);
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('remove-channel-select')
+      .setPlaceholder('Select a channel to remove')
+      .addOptions(channelOptions);
     
-    if (index === -1) {
-      return interaction.editReply(`❌ This channel is not in the monitoring list!\n\nChannel ID: \`${channelId}\``);
-    }
+    const row = new ActionRowBuilder().addComponents(selectMenu);
     
-    guildConfig.youtube.channelIds.splice(index, 1);
+    const response = await interaction.editReply({
+      content: '🗑️ **Select a YouTube channel to remove:**',
+      components: [row]
+    });
     
-    if (saveConfig()) {
-      await interaction.editReply(`✅ Removed YouTube channel from the monitoring list!\n\nChannel ID: \`${channelId}\`\nRemaining channels: ${guildConfig.youtube.channelIds.length}`);
-      console.log(`Guild ${interaction.guildId} removed ${channelId} from YouTube monitoring`);
-    } else {
-      await interaction.editReply('❌ Error saving configuration. Please try again.');
+    // Wait for selection
+    try {
+      const collector = response.createMessageComponentCollector({
+        filter: i => i.user.id === interaction.user.id,
+        time: 60000
+      });
+      
+      collector.on('collect', async i => {
+        const channelId = i.values[0];
+        const index = guildConfig.youtube.channelIds.indexOf(channelId);
+        
+        if (index !== -1) {
+          guildConfig.youtube.channelIds.splice(index, 1);
+          
+          if (saveConfig()) {
+            await i.update({
+              content: `✅ Removed YouTube channel from the monitoring list!\n\nChannel ID: \`${channelId}\`\nRemaining channels: ${guildConfig.youtube.channelIds.length}`,
+              components: []
+            });
+            console.log(`Guild ${interaction.guildId} removed ${channelId} from YouTube monitoring`);
+          } else {
+            await i.update({
+              content: '❌ Error saving configuration. Please try again.',
+              components: []
+            });
+          }
+        }
+        
+        collector.stop();
+      });
+      
+      collector.on('end', (collected, reason) => {
+        if (reason === 'time') {
+          interaction.editReply({
+            content: '⏱️ Selection timed out.',
+            components: []
+          }).catch(console.error);
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error handling channel removal:', error);
+      await interaction.editReply({
+        content: '❌ An error occurred. Please try again.',
+        components: []
+      });
     }
   }
 };

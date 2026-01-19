@@ -1,34 +1,90 @@
-// commands/removestreamer.js
 const { getGuildConfig, saveConfig } = require('../utils/config');
+const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
 
 module.exports = {
   data: {
     name: 'removestreamer',
-    description: 'Remove a Twitch streamer from the monitoring list',
-    options: [{
-      name: 'username',
-      description: 'Twitch username',
-      type: 3,
-      required: true
-    }]
+    description: 'Remove a Twitch streamer from the monitoring list'
   },
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);
-    const username = interaction.options.getString('username').toLowerCase();
-    const index = guildConfig.twitch.usernames.indexOf(username);
     
-    if (index === -1) {
-      return interaction.reply(`❌ **${username}** is not in the monitoring list!`);
+    if (guildConfig.twitch.usernames.length === 0) {
+      return interaction.reply('📋 No Twitch streamers are currently being monitored.');
     }
     
-    guildConfig.twitch.usernames.splice(index, 1);
+    const options = guildConfig.twitch.usernames.map(username => 
+      new StringSelectMenuOptionBuilder()
+        .setLabel(username)
+        .setValue(username)
+        .setEmoji('🎮')
+    );
     
-    if (saveConfig()) {
-      await interaction.reply(`✅ Removed **${username}** from the monitoring list!`);
-      console.log(`Guild ${interaction.guildId} removed ${username} from Twitch monitoring`);
-    } else {
-      await interaction.reply('❌ Error saving configuration. Please try again.');
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('remove-streamer-select')
+      .setPlaceholder('Select a streamer to remove')
+      .addOptions(options);
+    
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+    
+    const response = await interaction.reply({
+      content: '🗑️ **Select a Twitch streamer to remove:**',
+      components: [row],
+      fetchReply: true
+    });
+    
+    // Wait for selection
+    try {
+      const collector = response.createMessageComponentCollector({
+        filter: i => i.user.id === interaction.user.id,
+        time: 60000
+      });
+      
+      collector.on('collect', async i => {
+        const username = i.values[0];
+        const index = guildConfig.twitch.usernames.indexOf(username);
+        
+        if (index !== -1) {
+          guildConfig.twitch.usernames.splice(index, 1);
+          
+          // Also remove custom message if exists
+          if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
+            delete guildConfig.twitch.customMessages[username];
+          }
+          
+          if (saveConfig()) {
+            await i.update({
+              content: `✅ Removed **${username}** from the monitoring list!\n\nRemaining streamers: ${guildConfig.twitch.usernames.length}`,
+              components: []
+            });
+            console.log(`Guild ${interaction.guildId} removed ${username} from Twitch monitoring`);
+          } else {
+            await i.update({
+              content: '❌ Error saving configuration. Please try again.',
+              components: []
+            });
+          }
+        }
+        
+        collector.stop();
+      });
+      
+      collector.on('end', (collected, reason) => {
+        if (reason === 'time') {
+          interaction.editReply({
+            content: '⏱️ Selection timed out.',
+            components: []
+          }).catch(console.error);
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error handling streamer removal:', error);
+      await interaction.editReply({
+        content: '❌ An error occurred. Please try again.',
+        components: []
+      });
     }
   }
 };
