@@ -1,5 +1,5 @@
-// commands/listchannels.js
 const { getGuildConfig } = require('../utils/config');
+const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const { parseString } = require('xml2js');
 const util = require('util');
@@ -26,7 +26,6 @@ module.exports = {
     
     for (const channelId of guildConfig.youtube.channelIds) {
       try {
-        // Use RSS feed to get channel info
         const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
         const response = await axios.get(rssUrl, { timeout: 5000 });
         const result = await parseXML(response.data);
@@ -57,16 +56,77 @@ module.exports = {
       }
     }
     
-    // Build the response
-    let response = '📋 **Currently monitoring YouTube channels:**\n\n';
+    // Create embed for the list
+    const embed = new EmbedBuilder()
+      .setColor('#FF0000')
+      .setTitle('📋 Monitored YouTube Channels')
+      .setDescription(`Total: ${channelDetails.length} channel(s)`)
+      .setTimestamp();
+    
     channelDetails.forEach((channel, index) => {
-      response += `${index + 1}. **${channel.title}**\n`;
-      response += `   ${channel.url}\n`;
-      response += `   Channel ID: \`${channel.channelId}\`\n\n`;
+      embed.addFields({
+        name: `${index + 1}. ${channel.title}`,
+        value: `[Visit Channel](${channel.url})\nID: \`${channel.channelId}\``,
+        inline: false
+      });
     });
     
-    response += `_Total: ${channelDetails.length} channel(s)_`;
+    // Create dropdown for quick actions
+    const options = channelDetails.slice(0, 25).map((channel, index) => 
+      new StringSelectMenuOptionBuilder()
+        .setLabel(channel.title.substring(0, 100))
+        .setDescription(`View details`)
+        .setValue(channel.channelId)
+        .setEmoji('📺')
+    );
     
-    await interaction.editReply(response);
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('view-channel-details')
+      .setPlaceholder('Select a channel for more details')
+      .addOptions(options);
+    
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+    
+    const response = await interaction.editReply({
+      embeds: [embed],
+      components: [row]
+    });
+    
+    // Handle channel selection for details
+    try {
+      const collector = response.createMessageComponentCollector({
+        filter: i => i.user.id === interaction.user.id,
+        time: 120000
+      });
+      
+      collector.on('collect', async i => {
+        const selectedChannelId = i.values[0];
+        const selectedChannel = channelDetails.find(c => c.channelId === selectedChannelId);
+        
+        if (selectedChannel) {
+          const detailEmbed = new EmbedBuilder()
+            .setColor('#FF0000')
+            .setTitle(selectedChannel.title)
+            .setURL(selectedChannel.url)
+            .addFields(
+              { name: 'Channel URL', value: selectedChannel.url },
+              { name: 'Channel ID', value: `\`${selectedChannel.channelId}\`` }
+            )
+            .setTimestamp();
+          
+          await i.reply({
+            embeds: [detailEmbed],
+            ephemeral: true
+          });
+        }
+      });
+      
+      collector.on('end', () => {
+        interaction.editReply({ components: [] }).catch(console.error);
+      });
+      
+    } catch (error) {
+      console.error('Error handling channel selection:', error);
+    }
   }
 };
