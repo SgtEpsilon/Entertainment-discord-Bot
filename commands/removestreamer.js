@@ -14,28 +14,6 @@ module.exports = {
       return interaction.reply('📋 No streamers are currently being monitored.');
     }
     
-    // Build streamer list with chunking to avoid Discord's 1024 char limit
-    const chunkSize = 1024;
-    const streamerEntries = guildConfig.twitch.usernames.map((username, index) => {
-      const hasCustomMessage = guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username];
-      return `${index + 1}. **${username}** ${hasCustomMessage ? '(Custom notification ✨)' : ''}`;
-    });
-    
-    // Split entries into chunks
-    const chunks = [];
-    let currentChunk = '';
-    
-    for (const entry of streamerEntries) {
-      const entryWithNewline = entry + '\n';
-      if ((currentChunk + entryWithNewline).length > chunkSize) {
-        if (currentChunk) chunks.push(currentChunk.trim());
-        currentChunk = entryWithNewline;
-      } else {
-        currentChunk += entryWithNewline;
-      }
-    }
-    if (currentChunk) chunks.push(currentChunk.trim());
-    
     // Build dropdown options (max 25 for Discord)
     const options = guildConfig.twitch.usernames.slice(0, 25).map(username => {
       const hasCustomMessage = guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username];
