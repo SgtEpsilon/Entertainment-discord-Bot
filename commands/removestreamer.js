@@ -1,25 +1,28 @@
+const { SlashCommandBuilder, PermissionFlagsBits, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
-const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
 
 module.exports = {
-  data: {
-    name: 'removestreamer',
-    description: 'Remove a Twitch streamer from the monitoring list'
-  },
+  data: new SlashCommandBuilder()
+    .setName('removestreamer')
+    .setDescription('Remove a Twitch streamer from the monitoring list')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);
     
     if (guildConfig.twitch.usernames.length === 0) {
-      return interaction.reply('📋 No Twitch streamers are currently being monitored.');
+      return interaction.reply('📋 No streamers are currently being monitored.');
     }
     
-    const options = guildConfig.twitch.usernames.map(username => 
-      new StringSelectMenuOptionBuilder()
+    // Build dropdown options (max 25 for Discord)
+    const options = guildConfig.twitch.usernames.slice(0, 25).map(username => {
+      const hasCustomMessage = guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username];
+      return new StringSelectMenuOptionBuilder()
         .setLabel(username)
+        .setDescription(hasCustomMessage ? 'Has custom notification' : 'Using default notification')
         .setValue(username)
-        .setEmoji('🎮')
-    );
+        .setEmoji('🎮');
+    });
     
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId('remove-streamer-select')
@@ -34,7 +37,6 @@ module.exports = {
       fetchReply: true
     });
     
-    // Wait for selection
     try {
       const collector = response.createMessageComponentCollector({
         filter: i => i.user.id === interaction.user.id,
@@ -48,7 +50,7 @@ module.exports = {
         if (index !== -1) {
           guildConfig.twitch.usernames.splice(index, 1);
           
-          // Also remove custom message if exists
+          // Also remove custom message if it exists
           if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
             delete guildConfig.twitch.customMessages[username];
           }
@@ -81,7 +83,7 @@ module.exports = {
       
     } catch (error) {
       console.error('Error handling streamer removal:', error);
-      await interaction.editReply({
+      await interaction.reply({
         content: '❌ An error occurred. Please try again.',
         components: []
       });

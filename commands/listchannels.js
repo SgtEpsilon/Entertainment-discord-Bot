@@ -1,5 +1,5 @@
+const { SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const { getGuildConfig } = require('../utils/config');
-const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const { parseString } = require('xml2js');
 const util = require('util');
@@ -7,10 +7,9 @@ const util = require('util');
 const parseXML = util.promisify(parseString);
 
 module.exports = {
-  data: {
-    name: 'listchannels',
-    description: 'Show all monitored YouTube channels'
-  },
+  data: new SlashCommandBuilder()
+    .setName('listchannels')
+    .setDescription('Show all monitored YouTube channels'),
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);
@@ -21,7 +20,6 @@ module.exports = {
     
     await interaction.deferReply();
     
-    // Fetch channel details from RSS feeds
     const channelDetails = [];
     
     for (const channelId of guildConfig.youtube.channelIds) {
@@ -56,7 +54,6 @@ module.exports = {
       }
     }
     
-    // Create embed for the list
     const embed = new EmbedBuilder()
       .setColor('#FF0000')
       .setTitle('📋 Monitored YouTube Channels')
@@ -71,7 +68,6 @@ module.exports = {
       });
     });
     
-    // Create dropdown for quick actions
     const options = channelDetails.slice(0, 25).map((channel, index) => 
       new StringSelectMenuOptionBuilder()
         .setLabel(channel.title.substring(0, 100))
@@ -92,7 +88,6 @@ module.exports = {
       components: [row]
     });
     
-    // Handle channel selection for details
     try {
       const collector = response.createMessageComponentCollector({
         filter: i => i.user.id === interaction.user.id,

@@ -5,33 +5,37 @@ discord-streaming-bot/
 │
 ├── node_modules/              # Dependencies (auto-generated)
 │
-├── commands/                  # Slash command handlers
-│   ├── setup.js              # /setup command (channel + optional live role)
-│   ├── setrole.js            # /setrole command (manage live role)
-│   ├── removerole.js         # /removerole command (remove live role config)
-│   ├── addstreamer.js        # /addstreamer command
-│   ├── removestreamer.js     # /removestreamer command
-│   ├── liststreamers.js      # /liststreamers command
-│   ├── addchannel.js         # /addchannel command
-│   ├── removechannel.js      # /removechannel command
-│   ├── listchannels.js       # /listchannels command
-│   ├── nudgetwitch.js        # /nudgetwitch command
-│   ├── nudgeyt.js            # /nudgeyt command
-│   └── help.js               # /help command
+├── commands/                  # Slash command handlers (alphabetical)
+│   ├── addchannel.js         # /addchannel - Add YouTube channel
+│   ├── addstreamer.js        # /addstreamer - Add Twitch streamer
+│   ├── help.js               # /help - Dynamic help menu
+│   ├── linkaccount.js        # /linkaccount - User self-link Twitch account
+│   ├── listchannels.js       # /listchannels - List YouTube channels
+│   ├── listlinks.js          # /listlinks - List linked Twitch accounts (Admin)
+│   ├── liststreamers.js      # /liststreamers - List Twitch streamers
+│   ├── manuallink.js         # /manuallink - Admin manual account linking
+│   ├── nudgetwitch.js        # /nudgetwitch - Manual Twitch stream check
+│   ├── nudgeyt.js            # /nudgeyt - Manual YouTube video check
+│   ├── removechannel.js      # /removechannel - Remove YouTube channel
+│   ├── removerole.js         # /removerole - Remove live role config
+│   ├── removestreamer.js     # /removestreamer - Remove Twitch streamer
+│   ├── setrole.js            # /setrole - Set/update live role
+│   ├── setup.js              # /setup - Configure notification channel + role
+│   └── unlinkaccount.js      # /unlinkaccount - Unlink Twitch accounts
 │
 ├── modules/                   # Bot modules
-│   ├── twitch.js             # Twitch monitoring logic + role management
-│   └── youtube.js            # YouTube monitoring logic
+│   ├── twitch.js             # Twitch monitoring + role management
+│   └── youtube.js            # YouTube monitoring
 │
 ├── utils/                     # Utility functions
-│   ├── config.js             # Config management
+│   ├── config.js             # Config management utilities
 │   └── youtube.js            # YouTube helper functions
 │
 ├── .env                       # Environment variables (API keys & tokens)
 ├── .gitignore                # Git ignore file
 ├── changelog.md              # Version history and changes
-├── config.json               # Multi-guild configuration
-├── index.js                  # Main bot file
+├── config.json               # Multi-guild configuration (auto-generated)
+├── index.js                  # Main bot entry point
 ├── package.json              # Project dependencies
 ├── package-lock.json         # Locked dependency versions (auto-generated)
 └── README.md                 # Documentation
@@ -44,67 +48,205 @@ discord-streaming-bot/
 
 #### `index.js`
 - Main bot entry point
-- Command loader
-- Event listeners
-- Minimal logic (delegates to commands)
+- Dynamic command loader
+- Event listeners:
+  - `ready` / `clientReady` - Bot startup and slash command registration
+  - `interactionCreate` - Handles slash command execution
+  - `presenceUpdate` - Detects streaming status for auto role assignment
+  - `guildDelete` - Cleans up config when bot is removed from server
+- Initializes TwitchMonitor and YouTubeMonitor
+- Requires intents: Guilds, GuildMessages, MessageContent, GuildMembers, GuildPresences
+
+#### `config.json`
+- Auto-generated on first run (start with `{"guilds":{}}`)
+- Stores per-guild configuration
+- Updated by commands and saved via `utils/config.js`
 
 #### `changelog.md`
 - Version history
 - Feature additions and changes
 - Bug fixes documentation
 
+---
+
 ### **Commands Directory** (`commands/`)
 
-Each file exports:
-- `data` - Command definition for Discord
-- `execute(interaction, client, config, monitors)` - Command logic
+All commands use `SlashCommandBuilder` for dynamic loading and export:
+- `data` - SlashCommandBuilder instance with command definition
+- `execute(interaction, client, config, monitors)` - Command execution logic
 
-#### Command Files:
-- **`setup.js`** - Set notification channel and optional live role
-  - Required: `channel` parameter
-  - Optional: `liverole` parameter for automatic role management
-- **`setrole.js`** - Set or update the live streamer role
-  - Optional: `role` parameter (omit to remove)
-- **`removerole.js`** - Remove live role configuration (alias for `/setrole`)
-- **`addstreamer.js`** - Add Twitch streamer with optional custom message
-- **`removestreamer.js`** - Remove Twitch streamer
-- **`liststreamers.js`** - List all Twitch streamers
-- **`addchannel.js`** - Add YouTube channel
-- **`removechannel.js`** - Remove YouTube channel
-- **`listchannels.js`** - List all YouTube channels
-- **`nudgetwitch.js`** - Check and post live streams
-- **`nudgeyt.js`** - Check and post latest videos
-- **`help.js`** - Show help menu
+#### Command Files (Alphabetical):
+
+**`addchannel.js`** - Add YouTube channel to monitoring
+- Uses modal or string input for channel URL/@handle/ID
+- Validates via RSS feed
+- Stores channel ID in config
+
+**`addstreamer.js`** - Add Twitch streamer to monitoring
+- Uses modal with username and optional custom message inputs
+- Validates streamer exists via Twitch API
+- Supports custom notification messages with placeholders
+
+**`help.js`** - Dynamic help menu
+- Automatically discovers all loaded commands
+- Categorizes commands (Setup, Account Linking, Twitch, YouTube, Utility)
+- Shows command descriptions pulled from SlashCommandBuilder
+- Displays total command count
+
+**`linkaccount.js`** - User self-link Twitch account
+- Opens modal for Twitch username input
+- Pre-fills existing link if already linked
+- Stores mapping in `config.json` under `linkedAccounts`
+- Enables auto role assignment via presence detection
+
+**`listchannels.js`** - List all monitored YouTube channels
+- Fetches channel names from RSS feeds
+- Displays in embed with dropdown for details
+- Shows channel URLs and IDs
+
+**`listlinks.js`** - List all linked Twitch accounts (Admin only)
+- Requires Administrator permission
+- Shows Discord user → Twitch username mappings
+- Handles users who left the server
+
+**`liststreamers.js`** - List all monitored Twitch streamers
+- Shows custom notification indicators
+- Dropdown menu for detailed view
+- Displays notification messages
+
+**`manuallink.js`** - Admin manual account linking
+- Requires Administrator permission
+- User select menu → Modal for Twitch username
+- Pre-fills existing links for editing
+- Updates or creates new links
+
+**`nudgetwitch.js`** - Manual Twitch stream check
+- Checks all monitored streamers for live status
+- Dropdown menu to select which streams to post
+- Posts to configured notification channel
+- Shows viewer counts and game info
+
+**`nudgeyt.js`** - Manual YouTube video check
+- Checks all monitored channels for recent videos
+- Dropdown menu to select which videos to post
+- Posts to configured notification channel
+
+**`removechannel.js`** - Remove YouTube channel from monitoring
+- Fetches channel names for dropdown
+- Dropdown selection for removal
+- Updates config
+
+**`removerole.js`** - Remove live role configuration
+- Alias for `/setrole` without parameters
+- Removes role from config
+- Does not remove role from current members
+
+**`removestreamer.js`** - Remove Twitch streamer from monitoring
+- Dropdown menu of current streamers
+- Also removes custom messages if configured
+- Updates config
+
+**`setrole.js`** - Set or update live streamer role
+- Optional role parameter (omit to remove)
+- Validates bot can manage the role
+- Checks role position and managed status
+
+**`setup.js`** - Configure notification channel and live role
+- Required: Text channel selection
+- Optional: Live role selection
+- Validates permissions and role hierarchy
+
+**`unlinkaccount.js`** - Unlink Twitch accounts
+- Users can unlink themselves
+- Admins can unlink any user via dropdown
+- Shows Twitch usernames in dropdown for easy identification
+
+---
 
 ### **Modules Directory** (`modules/`)
 
-#### `twitch.js`
-- TwitchMonitor class
-- Stream status checking
-- OAuth token management
-- **Live role management**:
-  - `findMemberByTwitchUsername()` - Smart Discord member matching
-  - `assignLiveRole()` - Auto-assign role when going live
-  - `removeLiveRole()` - Auto-remove role when going offline
-  - Member ID caching for efficiency
+#### `twitch.js` - TwitchMonitor Class
+**Properties:**
+- `client` - Discord.js client instance
+- `config` - Config object reference
+- `accessToken` - Twitch API OAuth token
+- `liveStreamers` - Map of guild → username → {game_id, memberId, messageId, channelId}
+- `connectedAccountsCache` - Cache for linked account lookups
 
-#### `youtube.js`
-- YouTubeMonitor class
-- RSS feed-based monitoring (no API key required)
-- Video upload checking
-- Notification sending
+**Methods:**
+- `getAccessToken()` - Obtains Twitch OAuth token
+- `findMemberByTwitchUsername(members, twitchUsername)` - Finds Discord member by username (uses cache)
+- `assignLiveRole(guild, guildConfig, username, memberId?)` - Assigns live role when streaming
+- `removeLiveRole(guild, guildConfig, username, memberId?)` - Removes live role when offline
+- `checkStreams()` - Main monitoring loop (runs every 60 seconds)
+- `sendNotification(stream, guildId, guildConfig)` - Sends new stream notification
+- `updateNotification(stream, guildId, guildConfig, cachedData)` - Updates existing notification on game change
+- `checkSpecificStreamers(usernames)` - Used by `/nudgetwitch`
+- `start()` - Starts monitoring interval
+- `stop()` - Stops monitoring interval
+
+**Features:**
+- Game change detection (updates message instead of new notification)
+- Member ID caching for efficient role management
+- Custom message support with placeholders: {username}, {title}, {game}, {url}
+- Message editing when game changes (adds "Updated" to footer)
+
+#### `youtube.js` - YouTubeMonitor Class
+**Properties:**
+- `client` - Discord.js client instance
+- `config` - Config object reference
+- `lastChecked` - Map of channel → last video ID
+
+**Methods:**
+- `checkVideos()` - Main monitoring loop (runs every 5 minutes)
+- `sendNotification(video, guildId, guildConfig)` - Sends new video notification
+- `checkSpecificChannels(channelIds)` - Used by `/nudgeyt`
+- `start()` - Starts monitoring interval
+- `stop()` - Stops monitoring interval
+
+**Features:**
+- RSS feed-based (no API key required)
+- Tracks last video per channel to avoid duplicates
+- Message placeholders: {channel}, {title}
+
+---
 
 ### **Utils Directory** (`utils/`)
 
-#### `config.js`
-- `getGuildConfig(guildId)` - Get/create guild config
-- `saveConfig()` - Save config to file
-- `deleteGuildConfig(guildId)` - Remove guild config on bot removal
-- Includes `liveRoleId` in default configuration
+#### `config.js` - Configuration Management
+**Functions:**
+- `getGuildConfig(guildId)` - Retrieves or creates guild config with defaults
+- `saveConfig()` - Saves config.json to disk
+- `deleteGuildConfig(guildId)` - Removes guild config (on bot removal)
 
-#### `youtube.js`
-- `extractYouTubeChannelId(input)` - Parse channel from URL/@handle/ID
-- RSS-based validation
+**Default Guild Config:**
+```javascript
+{
+  channelId: null,
+  liveRoleId: null,
+  twitch: {
+    usernames: [],
+    checkInterval: 60000,
+    message: "🔴 {username} is now live on Twitch!\n**{title}**\nPlaying: {game}",
+    linkedAccounts: {}  // NEW: Discord ID → Twitch username mapping
+  },
+  youtube: {
+    channelIds: [],
+    checkInterval: 300000,
+    message: "📺 {channel} just uploaded a new video!\n**{title}**"
+  }
+}
+```
+
+#### `youtube.js` - YouTube Helper Functions
+**Functions:**
+- `extractYouTubeChannelId(input)` - Extracts channel ID from:
+  - Full URL (youtube.com/channel/UC... or youtube.com/@handle)
+  - @handle
+  - Direct channel ID (UC...)
+  - Validates via RSS feed fetch
+
+---
 
 ## Configuration Schema
 
@@ -114,22 +256,30 @@ Each file exports:
   "guilds": {
     "GUILD_ID": {
       "channelId": "CHANNEL_ID",
-      "liveRoleId": "ROLE_ID",  // NEW in v0.0.7
+      "liveRoleId": "ROLE_ID",
       "twitch": {
-        "usernames": [],
+        "usernames": ["streamer1", "streamer2"],
         "checkInterval": 60000,
-        "message": "🔴 {username} is now live...",
-        "customMessages": {}
+        "message": "🔴 {username} is now live on Twitch!\n**{title}**\nPlaying: {game}",
+        "customMessages": {
+          "streamer1": "🎮 Custom message for streamer1!"
+        },
+        "linkedAccounts": {
+          "DISCORD_USER_ID_1": "twitch_username_1",
+          "DISCORD_USER_ID_2": "twitch_username_2"
+        }
       },
       "youtube": {
-        "channelIds": [],
+        "channelIds": ["UC...", "UC..."],
         "checkInterval": 300000,
-        "message": "📺 {channel} just uploaded..."
+        "message": "📺 {channel} just uploaded a new video!\n**{title}**"
       }
     }
   }
 }
 ```
+
+---
 
 ## Setup Instructions
 
@@ -145,8 +295,8 @@ cd discord-streaming-bot
 touch index.js .env .gitignore README.md changelog.md
 echo '{"guilds":{}}' > config.json
 
-# Commands (including new role commands)
-touch commands/{setup,setrole,removerole,addstreamer,removestreamer,liststreamers,addchannel,removechannel,listchannels,nudgetwitch,nudgeyt,help}.js
+# Commands (alphabetical)
+touch commands/{addchannel,addstreamer,help,linkaccount,listchannels,listlinks,liststreamers,manuallink,nudgetwitch,nudgeyt,removechannel,removerole,removestreamer,setrole,setup,unlinkaccount}.js
 
 # Modules
 touch modules/{twitch,youtube}.js
@@ -161,44 +311,72 @@ npm init -y
 npm install discord.js@14.14.1 dotenv@16.3.1 axios@1.6.2 xml2js@0.6.2
 ```
 
-### 4. Populate files with code from artifacts
+### 4. Configure environment variables (.env)
+```env
+DISCORD_BOT_TOKEN=your_bot_token_here
+TWITCH_CLIENT_ID=your_twitch_client_id
+TWITCH_CLIENT_SECRET=your_twitch_client_secret
+```
 
-### 5. Run the bot
+### 5. Enable Discord Intents
+In Discord Developer Portal → Your App → Bot:
+- ✅ Presence Intent
+- ✅ Server Members Intent
+- ✅ Message Content Intent
+
+### 6. Populate files with code from artifacts
+
+### 7. Run the bot
 ```bash
 npm start
 ```
 
-## New in v0.0.7: Live Role Management
+---
 
-### Role Assignment Flow
-1. Admin configures live role: `/setup channel:#notifications liverole:@LiveNow`
-2. When streamer goes live:
-   - Bot finds Discord member by Twitch username
-   - Assigns configured role
-   - Caches member ID for efficiency
-3. When streamer goes offline:
-   - Bot removes the role
-   - Clears cache entry
+## Features Overview
 
-### Member Matching Priority
-1. Exact nickname match
-2. Exact username match
-3. Partial nickname match
-4. Partial username match
+### Live Role Management (v0.0.8+)
+**Manual Account Linking:**
+1. User runs `/linkaccount` or admin runs `/manuallink`
+2. Twitch username stored in `config.json`
+3. Bot uses linked accounts for role assignment
 
-### Role Management Commands
-- `/setup channel:#notifications liverole:@LiveNow` - Set both channel and role
-- `/setrole role:@LiveNow` - Set/update live role only
-- `/setrole` - Remove live role configuration
-- `/removerole` - Alternative way to remove role config
+**Auto Role Assignment via Presence:**
+1. User starts streaming on Twitch
+2. Discord presence shows "Streaming" status
+3. Bot detects via `presenceUpdate` event
+4. Bot assigns configured live role automatically
+5. When stream ends, role is removed
+
+**Role Assignment Priority:**
+1. Check `linkedAccounts` mapping (most reliable)
+2. Check cached members by username/nickname match
+3. Fetch all members and search by username/nickname
+
+### Stream Notification Updates
+- First notification sent when streamer goes live
+- Message edited (not reposted) when game changes
+- Thumbnail, viewer count, and game info updated
+- Footer shows "Twitch • Updated" on edits
+
+### Command Categories
+- **Server Setup**: setup, setrole, removerole
+- **Account Linking**: linkaccount, manuallink, unlinkaccount, listlinks
+- **Twitch Monitoring**: addstreamer, removestreamer, liststreamers, nudgetwitch
+- **YouTube Monitoring**: addchannel, removechannel, listchannels, nudgeyt
+- **Utility**: help
+
+---
 
 ## File Organization Benefits
 
-✅ **Maintainability** - Each command in its own file  
-✅ **Scalability** - Easy to add new commands  
-✅ **Testing** - Individual command testing  
-✅ **Collaboration** - Multiple developers can work simultaneously  
-✅ **Debugging** - Easier to locate issues  
-✅ **Reusability** - Shared utilities in utils/  
-✅ **Feature Isolation** - Role management self-contained in twitch.js  
-✅ **Optional Features** - Role system works independently
+✅ **Alphabetically Organized** - Easy to locate files  
+✅ **Dynamic Command Loading** - Help menu auto-updates  
+✅ **Modular Architecture** - Each command in its own file  
+✅ **Scalable Design** - Easy to add new features  
+✅ **Interactive UI** - Dropdowns and modals for better UX  
+✅ **Presence Detection** - Real-time role assignment  
+✅ **Message Editing** - No spam from game changes  
+✅ **Multi-Guild Support** - Separate config per server  
+✅ **Caching System** - Efficient API usage  
+✅ **Error Handling** - Graceful failures with user feedback
