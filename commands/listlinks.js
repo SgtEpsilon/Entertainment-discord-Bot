@@ -11,8 +11,8 @@ module.exports = {
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guild.id);
 
-    // Check if there are any linked accounts
-    if (!guildConfig.twitch.linkedAccounts || Object.keys(guildConfig.twitch.linkedAccounts).length === 0) {
+    // Check if there are any linked accounts (with proper null checks)
+    if (!guildConfig.twitch?.linkedAccounts || Object.keys(guildConfig.twitch.linkedAccounts).length === 0) {
       return await interaction.reply({
         content: '📋 No linked accounts found in this server.',
         ephemeral: true

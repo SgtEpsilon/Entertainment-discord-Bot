@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 const axios = require('axios');
 const { parseString } = require('xml2js');
@@ -9,7 +9,8 @@ const parseXML = util.promisify(parseString);
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('removechannel')
-    .setDescription('Remove a YouTube channel from the monitoring list'),
+    .setDescription('Remove a YouTube channel from the monitoring list')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);

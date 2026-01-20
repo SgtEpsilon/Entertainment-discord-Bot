@@ -11,6 +11,11 @@ module.exports = {
     const guildConfig = getGuildConfig(interaction.guild.id);
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
 
+    // Initialize guildConfig.twitch if it doesn't exist
+    if (!guildConfig.twitch) {
+      guildConfig.twitch = {};
+    }
+
     // Initialize linkedAccounts if it doesn't exist
     if (!guildConfig.twitch.linkedAccounts) {
       guildConfig.twitch.linkedAccounts = {};

@@ -175,13 +175,16 @@ class TwitchMonitor {
 
             if (!lastNotification) {
               const messageId = await this.sendNotification(stream, guildId, guildConfig);
-              liveMap.set(username, { 
-                game_id: currentGameId, 
-                memberId: null,
-                messageId: messageId,
-                channelId: guildConfig.channelId
-              });
-              await this.assignLiveRole(guild, guildConfig, username);
+              // Only set liveMap and assign role if sendNotification returned a valid messageId
+              if (messageId) {
+                liveMap.set(username, { 
+                  game_id: currentGameId, 
+                  memberId: null,
+                  messageId: messageId,
+                  channelId: guildConfig.channelId
+                });
+                await this.assignLiveRole(guild, guildConfig, username);
+              }
             } else if (lastNotification.game_id !== currentGameId) {
               await this.updateNotification(stream, guildId, guildConfig, lastNotification);
               liveMap.get(username).game_id = currentGameId;
