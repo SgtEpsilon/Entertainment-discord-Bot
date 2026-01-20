@@ -124,11 +124,11 @@ Removes role when going offline
 
 
 Added sendNotification() return value (message ID)
-Added updateNotification() for editing messages
+Modified updateNotification() to return boolean success indicator
 
-Fetches and edits existing message
-Updates all embed fields
-Maintains button component
+Returns true on successful update
+Returns false on any failure (missing message, channel not found, etc.)
+Enables retry logic for failed updates
 
 
 
@@ -175,6 +175,7 @@ unlinkaccount.js: Added initialization checks for guildConfig.twitch before acce
 Permission Restrictions: Added missing administrator permissions
 
 removechannel.js: Added PermissionFlagsBits import and .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) to restrict command to administrators only
+removestreamer.js: Added administrator permission restriction for consistency
 
 
 Command Name Collision: Fixed duplicate command registration
@@ -182,18 +183,17 @@ Command Name Collision: Fixed duplicate command registration
 removestreamer.js: Changed .setName('liststreamers') to .setName('removestreamer') to resolve registration collision with liststreamers.js
 Implemented proper removal logic with dropdown menu for streamer selection
 Added removal of custom messages when streamer is removed
-
-
-Discord Field Length Limit: Fixed embed field overflow
-
-removestreamer.js: Implemented chunking logic to split long streamer lists into multiple fields (each ≤1024 characters) to comply with Discord's embed field character limit
+Removed unused chunking logic that was copied from liststreamers.js
 
 
 Notification Suppression Bug: Fixed failed notifications preventing retries
 
 twitch.js: Modified checkStreams() to only set liveMap entry and call assignLiveRole when sendNotification returns a valid (non-null) messageId
+Modified updateNotification() to return boolean success/failure indicator
+Added conditional check: only updates cached game_id if notification update succeeds
 Prevents caching of failed notifications that would suppress future notification attempts
-Failed notifications will now be retried on subsequent check cycles
+Failed notifications (both initial and updates) will now be retried on subsequent check cycles
+Added warning log when notification updates fail to indicate retry will occur
 
 
 Performance: Reduced API calls with member caching
@@ -233,8 +233,8 @@ Modals use ModalBuilder and TextInputBuilder
 Dropdowns use StringSelectMenuBuilder
 All null-safety checks use optional chaining or explicit initialization
 Proper error handling for missing configuration objects
-Chunking algorithm preserves formatting and numbering
-Retry mechanism allows recovery from temporary Discord API failures
+Retry mechanism allows recovery from temporary Discord API failures for both initial notifications and game change updates
+Boolean return values used for notification success/failure tracking
 
 Security & Validation
 
