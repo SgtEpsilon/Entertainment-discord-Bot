@@ -7,6 +7,7 @@ function getGuildConfig(guildId) {
   if (!config.guilds[guildId]) {
     config.guilds[guildId] = {
       channelId: null,
+      liveRoleId: null,
       twitch: {
         usernames: [],
         checkInterval: 60000,
