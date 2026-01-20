@@ -7,7 +7,7 @@ class TwitchMonitor {
     this.client = client;
     this.config = config;
     this.accessToken = null;
-    this.liveStreamers = new Map(); // Map of guildId -> Set of live streamers
+    this.liveStreamers = new Map(); // Map of guildId -> Map of username -> {game_id, memberId}
   }
 
   async getAccessToken() {
@@ -29,6 +29,117 @@ class TwitchMonitor {
     }
   }
 
+  async findMemberByTwitchUsername(guild, twitchUsername) {
+    // Try to find a member with matching nickname or username
+    const members = await guild.members.fetch();
+    
+    // First, try exact match on nickname
+    let member = members.find(m => 
+      m.nickname?.toLowerCase() === twitchUsername.toLowerCase()
+    );
+    
+    // Then try exact match on username
+    if (!member) {
+      member = members.find(m => 
+        m.user.username.toLowerCase() === twitchUsername.toLowerCase()
+      );
+    }
+    
+    // Then try partial match on nickname
+    if (!member) {
+      member = members.find(m => 
+        m.nickname?.toLowerCase().includes(twitchUsername.toLowerCase())
+      );
+    }
+    
+    // Finally try partial match on username
+    if (!member) {
+      member = members.find(m => 
+        m.user.username.toLowerCase().includes(twitchUsername.toLowerCase())
+      );
+    }
+    
+    return member;
+  }
+
+  async assignLiveRole(guild, guildConfig, username, memberId = null) {
+    if (!guildConfig.liveRoleId) return;
+
+    try {
+      const role = await guild.roles.fetch(guildConfig.liveRoleId);
+      if (!role) {
+        console.log(`Live role ${guildConfig.liveRoleId} not found in guild ${guild.id}`);
+        return;
+      }
+
+      // If we don't have a cached member ID, try to find the member
+      let member;
+      if (memberId) {
+        member = await guild.members.fetch(memberId);
+      } else {
+        member = await this.findMemberByTwitchUsername(guild, username);
+      }
+
+      if (!member) {
+        console.log(`Could not find Discord member for Twitch user ${username} in guild ${guild.id}`);
+        return;
+      }
+
+      // Check if member already has the role
+      if (member.roles.cache.has(role.id)) {
+        console.log(`Member ${member.user.tag} already has live role`);
+        return;
+      }
+
+      await member.roles.add(role);
+      console.log(`✅ Assigned live role to ${member.user.tag} (${username}) in guild ${guild.id}`);
+      
+      // Cache the member ID for future use
+      const liveMap = this.liveStreamers.get(guild.id);
+      if (liveMap && liveMap.has(username)) {
+        liveMap.get(username).memberId = member.id;
+      }
+    } catch (error) {
+      console.error(`Error assigning live role to ${username}:`, error.message);
+    }
+  }
+
+  async removeLiveRole(guild, guildConfig, username, memberId = null) {
+    if (!guildConfig.liveRoleId) return;
+
+    try {
+      const role = await guild.roles.fetch(guildConfig.liveRoleId);
+      if (!role) {
+        console.log(`Live role ${guildConfig.liveRoleId} not found in guild ${guild.id}`);
+        return;
+      }
+
+      // If we have a cached member ID, use it; otherwise try to find the member
+      let member;
+      if (memberId) {
+        member = await guild.members.fetch(memberId);
+      } else {
+        member = await this.findMemberByTwitchUsername(guild, username);
+      }
+
+      if (!member) {
+        console.log(`Could not find Discord member for Twitch user ${username} in guild ${guild.id}`);
+        return;
+      }
+
+      // Check if member has the role
+      if (!member.roles.cache.has(role.id)) {
+        console.log(`Member ${member.user.tag} doesn't have live role`);
+        return;
+      }
+
+      await member.roles.remove(role);
+      console.log(`❌ Removed live role from ${member.user.tag} (${username}) in guild ${guild.id}`);
+    } catch (error) {
+      console.error(`Error removing live role from ${username}:`, error.message);
+    }
+  }
+
   async checkStreams() {
     if (!this.accessToken) {
       await this.getAccessToken();
@@ -41,12 +152,13 @@ class TwitchMonitor {
         continue;
       }
 
-      // Initialize live streamers set for this guild if it doesn't exist
+      // Initialize live streamers map for this guild if it doesn't exist
       if (!this.liveStreamers.has(guildId)) {
         this.liveStreamers.set(guildId, new Map());
       }
 
       const liveMap = this.liveStreamers.get(guildId);
+      const guild = await this.client.guilds.fetch(guildId);
 
       for (const username of guildConfig.twitch.usernames) {
         try {
@@ -69,12 +181,21 @@ class TwitchMonitor {
             // 1. First time going live (no previous notification)
             // 2. Game changed (different game_id)
             if (!lastNotification || lastNotification.game_id !== currentGameId) {
-              liveMap.set(username, { game_id: currentGameId });
+              liveMap.set(username, { game_id: currentGameId, memberId: lastNotification?.memberId });
               await this.sendNotification(stream, guildId, guildConfig);
+              
+              // Assign live role when going live for the first time
+              if (!lastNotification) {
+                await this.assignLiveRole(guild, guildConfig, username);
+              }
             }
           } else {
             // Streamer is offline
-            liveMap.delete(username);
+            if (liveMap.has(username)) {
+              const cachedData = liveMap.get(username);
+              await this.removeLiveRole(guild, guildConfig, username, cachedData?.memberId);
+              liveMap.delete(username);
+            }
           }
         } catch (error) {
           if (error.response?.status === 401) {
