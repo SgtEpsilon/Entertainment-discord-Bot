@@ -7,248 +7,307 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-[BETA 0.0.8] - 2025-01-20
-Added
-
-Account Linking System: Manual Twitch account linking for reliable role assignment
-
-New /linkaccount command - Users can self-link their Twitch accounts
-
-Opens modal with Twitch username input
-Pre-fills existing link if already configured
-Stores mapping in config.json under linkedAccounts
-
-
-New /manuallink command - Admins can manually link any user
-
-User select menu for visual user picking
-Modal for Twitch username input
-Pre-fills existing links for editing
-Requires Administrator permission
-
-
-New /unlinkaccount command - Remove account links
-
-Users can unlink their own account
-Admins can unlink any user via dropdown
-Shows Twitch usernames for easy identification
-
-
-New /listlinks command - View all linked accounts
-
-Admin only command
-Shows Discord user → Twitch username mappings
-Handles users who left the server
-
-
-
-
-Presence Detection: Real-time streaming detection via Discord presence
-
-Added presenceUpdate event listener in index.js
-Detects when linked users start/stop streaming on Twitch
-Automatically assigns/removes live role in real-time
-Works independently of monitored streamer list
-Requires linkedAccounts configuration per guild
-Requires PRESENCE INTENT to be enabled
-
-
-Interactive UI Overhaul: Replaced text inputs with visual components
-
-All commands now use modals, dropdowns, or user select menus
-Better user experience with point-and-click interface
-Pre-filled forms for editing existing data
-Consistent ephemeral replies across all commands
-
-
-Message Editing on Game Change: Updates existing notification instead of posting new
-
-Added updateNotification() method in modules/twitch.js
-Stores message ID and channel ID in liveStreamers Map
-Edits message when game changes (prevents spam)
-Updates thumbnail, viewer count, and game info
-Footer shows "Twitch • Updated" on edited messages
-Only sends new notification on initial go-live
-
-
-Dynamic Help Menu: Auto-discovering command documentation
-
-Help command dynamically loads all available commands
-Automatically categorizes commands by function
-Pulls descriptions from SlashCommandBuilder definitions
-Shows total command count in footer
-Always up-to-date when new commands are added
-
-
-
-Changed
-
-All Commands Updated to SlashCommandBuilder: Standardized command structure
-
-commands/setup.js - Uses addChannelOption and addRoleOption
-commands/setrole.js - Uses addRoleOption
-commands/removerole.js - SlashCommandBuilder (no options)
-commands/addstreamer.js - SlashCommandBuilder with modal
-commands/removestreamer.js - SlashCommandBuilder with dropdown
-commands/liststreamers.js - SlashCommandBuilder with dropdown
-commands/addchannel.js - Uses addStringOption
-commands/removechannel.js - SlashCommandBuilder with dropdown
-commands/listchannels.js - SlashCommandBuilder with dropdown
-commands/nudgetwitch.js - SlashCommandBuilder with dropdown
-commands/nudgeyt.js - SlashCommandBuilder with dropdown
-commands/linkaccount.js - SlashCommandBuilder with modal (NEW)
-commands/manuallink.js - SlashCommandBuilder with user select + modal (NEW)
-commands/unlinkaccount.js - SlashCommandBuilder with dropdown (NEW)
-commands/listlinks.js - SlashCommandBuilder (NEW)
-commands/help.js - Dynamic command discovery (UPDATED)
-
-
-Twitch Monitor (modules/twitch.js):
-
-Modified liveStreamers Map to store {game_id, memberId, messageId, channelId}
-Added connectedAccountsCache Map for linked account lookups
-Updated findMemberByTwitchUsername() to accept members Collection (no API calls)
-Updated assignLiveRole() to check linked accounts first
-
-Priority 1: Linked accounts from config
-Priority 2: Cached members (no fetch)
-Priority 3: Fetch all members and search
-
-
-Updated removeLiveRole() with same priority system
-Updated checkStreams() to store message IDs
-
-Sends notification on go-live
-Edits message on game change
-Removes role when going offline
-
-
-Added sendNotification() return value (message ID)
-Modified updateNotification() to return boolean success indicator
-
-Returns true on successful update
-Returns false on any failure (missing message, channel not found, etc.)
-Enables retry logic for failed updates
-
-
-
-
-Index.js (index.js):
-
-Added GuildMembers and GuildPresences intents
-Added presenceUpdate event handler
-
-Checks for linked Twitch accounts
-Detects streaming activity on Twitch
-Assigns/removes live role automatically
-Works in real-time with Discord presence
-
-
-
-
-Config Schema (utils/config.js):
-
-Added linkedAccounts: {} to default guild configuration
-Stores Discord user ID → Twitch username mappings
-Persists across bot restarts
-
-
-Help Command (commands/help.js):
-
-Complete rewrite with dynamic command discovery
-Iterates through client.commands collection
-Categorizes commands automatically
-Uses command mapping for organization
-Displays in rich embed format
-
-
-
-Fixed
-
-Critical Null Reference Fixes: Resolved TypeError crashes across multiple commands
-
-listlinks.js: Added optional chaining (guildConfig.twitch?.linkedAccounts) to safely check if twitch exists before accessing linkedAccounts
-manuallink.js: Added initialization checks for guildConfig.twitch before accessing properties; ensures both guildConfig.twitch and guildConfig.twitch.linkedAccounts are properly initialized
-unlinkaccount.js: Added initialization checks for guildConfig.twitch before accessing properties; ensures safe access to nested properties
-
-
-Permission Restrictions: Added missing administrator permissions
-
-removechannel.js: Added PermissionFlagsBits import and .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) to restrict command to administrators only
-removestreamer.js: Added administrator permission restriction for consistency
-
-
-Command Name Collision: Fixed duplicate command registration
-
-removestreamer.js: Changed .setName('liststreamers') to .setName('removestreamer') to resolve registration collision with liststreamers.js
-Implemented proper removal logic with dropdown menu for streamer selection
-Added removal of custom messages when streamer is removed
-Removed unused chunking logic that was copied from liststreamers.js
-
-
-Notification Suppression Bug: Fixed failed notifications preventing retries
-
-twitch.js: Modified checkStreams() to only set liveMap entry and call assignLiveRole when sendNotification returns a valid (non-null) messageId
-Modified updateNotification() to return boolean success/failure indicator
-Added conditional check: only updates cached game_id if notification update succeeds
-Prevents caching of failed notifications that would suppress future notification attempts
-Failed notifications (both initial and updates) will now be retried on subsequent check cycles
-Added warning log when notification updates fail to indicate retry will occur
-
-
-Performance: Reduced API calls with member caching
-
-findMemberByTwitchUsername() now uses cache first
-Only fetches when cache misses
-Member IDs cached after first role assignment
-
-
-Notification Spam: Fixed duplicate messages during long streams
-
-Messages now edited on game change
-Only new notification on initial go-live
-Prevents channel flooding
-
-
-Command Registration: All commands now properly register as slash commands
-
-Consistent SlashCommandBuilder usage
-Proper option type definitions
-Auto-registration on bot startup
-
-
-
-Technical Details
-
-Added 4 new commands for account linking system
-Total commands: 16 (up from 12)
-All commands use ephemeral replies where appropriate
-Enhanced error handling across all commands
-Comprehensive logging for debugging
-Message editing uses Discord.js Message.edit()
-Presence detection uses ActivityType.Streaming
-Cache system prevents repeated member lookups
-User select menus use ComponentType.UserSelect
-Modals use ModalBuilder and TextInputBuilder
-Dropdowns use StringSelectMenuBuilder
-All null-safety checks use optional chaining or explicit initialization
-Proper error handling for missing configuration objects
-Retry mechanism allows recovery from temporary Discord API failures for both initial notifications and game change updates
-Boolean return values used for notification success/failure tracking
-
-Security & Validation
-
-Account links validated before storage
-Admin-only commands properly restricted
-Permission checks before role operations
-Graceful handling of missing permissions
-User-specific interaction collectors
-
-Dependencies
-
-No new dependencies added
-Uses existing Discord.js v14 features
-Compatible with current package versions
+## [BETA 0.0.9] - 2025-01-20
+
+### Added
+
+**Bot Status Management System**: Dynamic status rotation with admin override
+
+- **Automatic Status Rotation**: Bot status changes every 30 seconds
+  - Loads status messages from `status.json` on startup
+  - Randomly selects from available messages
+  - Supports all Discord activity types (Playing, Streaming, Listening, Watching, Competing)
+  - Falls back to default messages if `status.json` is missing or invalid
+  - Logs number of loaded status messages on startup
+
+- **New `/customstatus` Command** (Admin Only):
+  - Set a custom bot status that pauses automatic rotation
+  - Opens with dropdown to select activity type
+  - Text input for status message
+  - Optional URL parameter for Streaming type
+  - Validates URL is provided for Streaming type
+  - Requires Administrator permission
+  - Ephemeral responses for privacy
+
+- **New `/clearstatus` Command** (Admin Only):
+  - Clears custom status and resumes automatic rotation
+  - Shows warning if no custom status is active
+  - Requires Administrator permission
+  - Ephemeral responses for privacy
+
+- **Status Management Functions in index.js**:
+  - `setStatus(client, type, text, url)` - Sets a specific status with type validation
+  - `setRandomStatus(client)` - Randomly selects and sets status from `status.json`
+  - `setCustomStatus(type, text, url)` - Sets custom status and pauses rotation
+  - `clearCustomStatus()` - Clears custom status and resumes rotation
+  - `getCustomStatusActive()` - Returns boolean indicating if custom status is active
+  - Functions exported on client object for command access
+
+- **status.json File**: New configuration file for status messages
+  - Auto-generated with default messages if missing
+  - JSON array of status objects with `type`, `text`, and optional `url`
+  - Fully customizable by editing the file
+  - Loaded once on bot startup (requires restart to reload changes)
+
+- **Help Menu Updates**: Added "Bot Management" category
+  - New category for bot administration commands
+  - Includes `/customstatus` and `/clearstatus`
+  - Custom icon (🎮) for the category
+  - Dynamically updates when commands are added
+
+### Changed
+
+- **index.js Status System**:
+  - Added `statusMessages` array loaded from `status.json`
+  - Added `customStatusActive` boolean flag to track custom status state
+  - Added `statusInterval` variable to store rotation interval reference
+  - Modified `ready` event to set initial status and start rotation
+  - Status rotation checks `customStatusActive` before changing status
+  - Compatible with both Discord.js v13 and v14+ ActivityType enums
+
+- **help.js Command Categories**:
+  - Added "Bot Management" to categories object
+  - Added category mapping for `customstatus` and `clearstatus`
+  - Added category icon for Bot Management (🎮)
+
+- **File Structure**:
+  - Added `status.json` to root directory
+  - Added `commands/customstatus.js`
+  - Added `commands/clearstatus.js`
+
+### Technical Details
+
+- Status rotation interval: 30000ms (30 seconds) - configurable in `index.js`
+- Custom status persists until manually cleared (survives rotation cycles)
+- Status messages support all Discord activity types
+- ActivityType enum compatibility for Discord.js v13 and v14+
+- Graceful fallback to default messages if `status.json` is missing
+- Empty status array safety check prevents crashes
+- Both commands use PermissionFlagsBits.Administrator for access control
+- Double permission check (SlashCommandBuilder + manual verification)
+- Console logging for status changes and custom status events
+- Status functions attached to client object for global access
+
+### Security & Validation
+
+- Administrator permission required for both status commands
+- Manual permission verification in addition to SlashCommandBuilder restrictions
+- URL validation for Streaming type (must provide URL)
+- Error handling for missing client or invalid operations
+- Ephemeral responses prevent status command spam in channels
+
+### Dependencies
+
+- No new dependencies added
+- Uses existing Discord.js v14 features
+- Compatible with current package versions
+
+---
+
+## [BETA 0.0.8] - 2025-01-20
+
+### Added
+
+**Account Linking System**: Manual Twitch account linking for reliable role assignment
+
+- **New `/linkaccount` Command** - Users can self-link their Twitch accounts
+  - Opens modal with Twitch username input
+  - Pre-fills existing link if already configured
+  - Stores mapping in config.json under linkedAccounts
+
+- **New `/manuallink` Command** - Admins can manually link any user
+  - User select menu for visual user picking
+  - Modal for Twitch username input
+  - Pre-fills existing links for editing
+  - Requires Administrator permission
+
+- **New `/unlinkaccount` Command** - Remove account links
+  - Users can unlink their own account
+  - Admins can unlink any user via dropdown
+  - Shows Twitch usernames for easy identification
+
+- **New `/listlinks` Command** - View all linked accounts
+  - Admin only command
+  - Shows Discord user → Twitch username mappings
+  - Handles users who left the server
+
+**Presence Detection**: Real-time streaming detection via Discord presence
+
+- Added `presenceUpdate` event listener in index.js
+- Detects when linked users start/stop streaming on Twitch
+- Automatically assigns/removes live role in real-time
+- Works independently of monitored streamer list
+- Requires linkedAccounts configuration per guild
+- Requires PRESENCE INTENT to be enabled
+
+**Interactive UI Overhaul**: Replaced text inputs with visual components
+
+- All commands now use modals, dropdowns, or user select menus
+- Better user experience with point-and-click interface
+- Pre-filled forms for editing existing data
+- Consistent ephemeral replies across all commands
+
+**Message Editing on Game Change**: Updates existing notification instead of posting new
+
+- Added `updateNotification()` method in modules/twitch.js
+- Stores message ID and channel ID in liveStreamers Map
+- Edits message when game changes (prevents spam)
+- Updates thumbnail, viewer count, and game info
+- Footer shows "Twitch • Updated" on edited messages
+- Only sends new notification on initial go-live
+
+**Dynamic Help Menu**: Auto-discovering command documentation
+
+- Help command dynamically loads all available commands
+- Automatically categorizes commands by function
+- Pulls descriptions from SlashCommandBuilder definitions
+- Shows total command count in footer
+- Always up-to-date when new commands are added
+
+### Changed
+
+**All Commands Updated to SlashCommandBuilder**: Standardized command structure
+
+- commands/setup.js - Uses addChannelOption and addRoleOption
+- commands/setrole.js - Uses addRoleOption
+- commands/removerole.js - SlashCommandBuilder (no options)
+- commands/addstreamer.js - SlashCommandBuilder with modal
+- commands/removestreamer.js - SlashCommandBuilder with dropdown
+- commands/liststreamers.js - SlashCommandBuilder with dropdown
+- commands/addchannel.js - Uses addStringOption
+- commands/removechannel.js - SlashCommandBuilder with dropdown
+- commands/listchannels.js - SlashCommandBuilder with dropdown
+- commands/nudgetwitch.js - SlashCommandBuilder with dropdown
+- commands/nudgeyt.js - SlashCommandBuilder with dropdown
+- commands/linkaccount.js - SlashCommandBuilder with modal (NEW)
+- commands/manuallink.js - SlashCommandBuilder with user select + modal (NEW)
+- commands/unlinkaccount.js - SlashCommandBuilder with dropdown (NEW)
+- commands/listlinks.js - SlashCommandBuilder (NEW)
+- commands/help.js - Dynamic command discovery (UPDATED)
+
+**Twitch Monitor (modules/twitch.js)**:
+
+- Modified liveStreamers Map to store {game_id, memberId, messageId, channelId}
+- Added connectedAccountsCache Map for linked account lookups
+- Updated findMemberByTwitchUsername() to accept members Collection (no API calls)
+- Updated assignLiveRole() to check linked accounts first
+  - Priority 1: Linked accounts from config
+  - Priority 2: Cached members (no fetch)
+  - Priority 3: Fetch all members and search
+- Updated removeLiveRole() with same priority system
+- Updated checkStreams() to store message IDs
+  - Sends notification on go-live
+  - Edits message on game change
+  - Removes role when going offline
+- Added sendNotification() return value (message ID)
+- Modified updateNotification() to return boolean success indicator
+  - Returns true on successful update
+  - Returns false on any failure (missing message, channel not found, etc.)
+  - Enables retry logic for failed updates
+
+**Index.js (index.js)**:
+
+- Added GuildMembers and GuildPresences intents
+- Added presenceUpdate event handler
+  - Checks for linked Twitch accounts
+  - Detects streaming activity on Twitch
+  - Assigns/removes live role automatically
+  - Works in real-time with Discord presence
+
+**Config Schema (utils/config.js)**:
+
+- Added linkedAccounts: {} to default guild configuration
+- Stores Discord user ID → Twitch username mappings
+- Persists across bot restarts
+
+**Help Command (commands/help.js)**:
+
+- Complete rewrite with dynamic command discovery
+- Iterates through client.commands collection
+- Categorizes commands automatically
+- Uses command mapping for organization
+- Displays in rich embed format
+
+### Fixed
+
+**Critical Null Reference Fixes**: Resolved TypeError crashes across multiple commands
+
+- listlinks.js: Added optional chaining (guildConfig.twitch?.linkedAccounts) to safely check if twitch exists before accessing linkedAccounts
+- manuallink.js: Added initialization checks for guildConfig.twitch before accessing properties; ensures both guildConfig.twitch and guildConfig.twitch.linkedAccounts are properly initialized
+- unlinkaccount.js: Added initialization checks for guildConfig.twitch before accessing properties; ensures safe access to nested properties
+
+**Permission Restrictions**: Added missing administrator permissions
+
+- removechannel.js: Added PermissionFlagsBits import and .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) to restrict command to administrators only
+- removestreamer.js: Added administrator permission restriction for consistency
+
+**Command Name Collision**: Fixed duplicate command registration
+
+- removestreamer.js: Changed .setName('liststreamers') to .setName('removestreamer') to resolve registration collision with liststreamers.js
+- Implemented proper removal logic with dropdown menu for streamer selection
+- Added removal of custom messages when streamer is removed
+- Removed unused chunking logic that was copied from liststreamers.js
+
+**Notification Suppression Bug**: Fixed failed notifications preventing retries
+
+- twitch.js: Modified checkStreams() to only set liveMap entry and call assignLiveRole when sendNotification returns a valid (non-null) messageId
+- Modified updateNotification() to return boolean success/failure indicator
+- Added conditional check: only updates cached game_id if notification update succeeds
+- Prevents caching of failed notifications that would suppress future notification attempts
+- Failed notifications (both initial and updates) will now be retried on subsequent check cycles
+- Added warning log when notification updates fail to indicate retry will occur
+
+**Performance**: Reduced API calls with member caching
+
+- findMemberByTwitchUsername() now uses cache first
+- Only fetches when cache misses
+- Member IDs cached after first role assignment
+
+**Notification Spam**: Fixed duplicate messages during long streams
+
+- Messages now edited on game change
+- Only new notification on initial go-live
+- Prevents channel flooding
+
+**Command Registration**: All commands now properly register as slash commands
+
+- Consistent SlashCommandBuilder usage
+- Proper option type definitions
+- Auto-registration on bot startup
+
+### Technical Details
+
+- Added 4 new commands for account linking system
+- Total commands: 16 (up from 12)
+- All commands use ephemeral replies where appropriate
+- Enhanced error handling across all commands
+- Comprehensive logging for debugging
+- Message editing uses Discord.js Message.edit()
+- Presence detection uses ActivityType.Streaming
+- Cache system prevents repeated member lookups
+- User select menus use ComponentType.UserSelect
+- Modals use ModalBuilder and TextInputBuilder
+- Dropdowns use StringSelectMenuBuilder
+- All null-safety checks use optional chaining or explicit initialization
+- Proper error handling for missing configuration objects
+- Retry mechanism allows recovery from temporary Discord API failures for both initial notifications and game change updates
+- Boolean return values used for notification success/failure tracking
+
+### Security & Validation
+
+- Account links validated before storage
+- Admin-only commands properly restricted
+- Permission checks before role operations
+- Graceful handling of missing permissions
+- User-specific interaction collectors
+
+### Dependencies
+
+- No new dependencies added
+- Uses existing Discord.js v14 features
+- Compatible with current package versions
+
+---
 
 ## [BETA 0.0.7] - 2026-01-20
 

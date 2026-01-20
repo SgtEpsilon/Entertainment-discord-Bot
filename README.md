@@ -14,6 +14,7 @@ A modular Discord bot that monitors Twitch streams and YouTube channels for new 
 - ⚡ **Modular Design**: Easy to extend with new platforms
 - 🔄 **Automatic Token Management**: Handles Twitch OAuth tokens automatically
 - 🛠️ **Easy Commands**: Slash commands for all functionality
+- 🎮 **Custom Bot Status**: Rotating status messages with admin override controls
 
 ## Project Structure
 
@@ -23,6 +24,8 @@ discord-bot/
 ├── commands/             # Slash command handlers
 │   ├── setup.js         # Setup command (channel + role)
 │   ├── setrole.js       # Role management
+│   ├── customstatus.js  # Set custom bot status (Admin)
+│   ├── clearstatus.js   # Clear custom status (Admin)
 │   └── ...              # Other commands
 ├── modules/
 │   ├── twitch.js        # Twitch monitoring + role management
@@ -31,6 +34,7 @@ discord-bot/
 │   ├── config.js        # Config management
 │   └── youtube.js       # YouTube utilities
 ├── config.json          # Multi-guild configuration
+├── status.json          # Bot status messages
 ├── .env                 # Environment variables (API keys)
 ├── changelog.md         # Version history
 ├── package.json         # Dependencies
@@ -54,6 +58,7 @@ npm install
 5. Enable these **Privileged Gateway Intents**:
    - ✅ **SERVER MEMBERS INTENT** (required for role management)
    - ✅ **MESSAGE CONTENT INTENT** (required for legacy support)
+   - ✅ **PRESENCE INTENT** (required for automatic role assignment)
 6. Go to "OAuth2" > "URL Generator"
 7. Select scopes: `bot` and `applications.commands`
 8. Select permissions: 
@@ -125,13 +130,35 @@ Edit `config.json` to add your server's Guild ID:
 
 **Note:** The bot auto-creates entries for new guilds when you use the `/setup` command.
 
-### 7. Run the Bot
+### 7. Configure status.json (Optional)
+
+The bot will auto-generate `status.json` on first run, but you can create it manually:
+
+```json
+[
+  { "type": "WATCHING", "text": "for new streams" },
+  { "type": "WATCHING", "text": "Twitch streamers" },
+  { "type": "WATCHING", "text": "YouTube uploads" },
+  { "type": "PLAYING", "text": "with notifications" },
+  { "type": "LISTENING", "text": "to stream alerts" },
+  { "type": "STREAMING", "text": "live updates", "url": "https://twitch.tv" }
+]
+```
+
+**Available Activity Types:**
+- `PLAYING` - "Playing [text]"
+- `STREAMING` - "Streaming [text]" (requires URL)
+- `LISTENING` - "Listening to [text]"
+- `WATCHING` - "Watching [text]"
+- `COMPETING` - "Competing in [text]"
+
+### 8. Run the Bot
 
 ```bash
 npm start
 ```
 
-### 8. First-Time Setup in Discord
+### 9. First-Time Setup in Discord
 
 Once the bot is running, in each Discord server:
 
@@ -155,7 +182,12 @@ Once the bot is running, in each Discord server:
    /addchannel channel:@MrBeast
    ```
 
-4. **Test manually**:
+4. **Link your Twitch account** (for automatic role):
+   ```
+   /linkaccount
+   ```
+
+5. **Test manually**:
    ```
    /nudgetwitch
    /nudgeyt
@@ -173,6 +205,33 @@ All commands are **slash commands** - just type `/` in Discord to see them!
 | `/setrole` | Set or update live role (omit role to remove) | `/setrole role:@LiveNow` or `/setrole` |
 | `/removerole` | Remove live role configuration | `/removerole` |
 | `/help` | Display all available commands | `/help` |
+
+### 🎮 Bot Management Commands (Admin Only)
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `/customstatus` | Set a custom bot status (pauses rotation) | `/customstatus type:Playing text:Maintenance Mode` |
+| `/clearstatus` | Clear custom status and resume rotation | `/clearstatus` |
+
+**Custom Status Features:**
+- Pauses automatic status rotation
+- Supports all Discord activity types
+- Requires Administrator permission
+- Remains until manually cleared
+
+### 🔗 Account Linking Commands
+
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/linkaccount` | Link your Twitch account for auto role | Everyone |
+| `/manuallink` | Manually link any user's Twitch account | Admin Only |
+| `/unlinkaccount` | Unlink Twitch accounts | Self or Admin |
+| `/listlinks` | Show all linked Twitch accounts | Admin Only |
+
+**Why Link Your Account?**
+- Enables automatic live role when you stream
+- More reliable than username matching
+- Works even if Discord/Twitch names differ
 
 ### 🔴 Twitch Commands
 
@@ -217,7 +276,54 @@ Watch at: {url}
 - Channel URL - e.g., `https://youtube.com/channel/UCX6OQ3DkcsbYNE6H8uQQuVA`
 - Channel ID - e.g., `UCX6OQ3DkcsbYNE6H8uQQuVA`
 
-## 🎭 Live Role Management (New in v0.0.7!)
+## 🎮 Bot Status Management (New in v0.0.9!)
+
+The bot features a dynamic status system with automatic rotation and admin override capabilities.
+
+### Automatic Status Rotation
+
+The bot automatically rotates through status messages defined in `status.json`:
+- Changes every 30 seconds
+- Randomly selects from available messages
+- Supports all Discord activity types
+- Fully customizable by editing `status.json`
+
+### Custom Status Control (Admin Only)
+
+Administrators can override the rotation with a custom status:
+
+**Set a custom status:**
+```
+/customstatus type:Playing text:Maintenance Mode
+/customstatus type:Streaming text:Special Event url:https://twitch.tv/example
+```
+
+**Clear the custom status:**
+```
+/clearstatus
+```
+
+**Features:**
+- Pauses automatic rotation while active
+- Persists until manually cleared
+- Requires Administrator permission
+- Supports all activity types (Playing, Streaming, Listening, Watching, Competing)
+
+### Editing Status Messages
+
+Edit `status.json` to customize the rotation messages:
+
+```json
+[
+  { "type": "WATCHING", "text": "for new streams" },
+  { "type": "PLAYING", "text": "custom game" },
+  { "type": "LISTENING", "text": "your feedback" }
+]
+```
+
+**Note:** Bot must be restarted to reload `status.json` changes.
+
+## 🎭 Live Role Management (v0.0.7+)
 
 The bot can automatically assign a role to Discord members when they go live on Twitch and remove it when they go offline.
 
@@ -237,26 +343,34 @@ The bot can automatically assign a role to Discord members when they go live on 
    /setrole role:@LiveNow
    ```
 
+4. **Link your Twitch account** (recommended):
+   ```
+   /linkaccount
+   ```
+
 ### How It Works
 
-1. **When a streamer goes live**:
-   - Bot searches for a Discord member matching the Twitch username
-   - Assigns the configured live role to that member
-   - Caches the member ID for efficiency
+**With Account Linking (Recommended):**
+1. User links Twitch account via `/linkaccount`
+2. When user starts streaming on Twitch, Discord detects it via presence
+3. Bot assigns live role automatically
+4. When stream ends, role is removed
 
-2. **When a streamer goes offline**:
-   - Bot removes the live role from the member
-   - Clears the cached entry
+**Without Account Linking (Fallback):**
+1. Bot searches for Discord members matching Twitch username
+2. Assigns role based on username/nickname match
+3. Less reliable than account linking
 
-### Member Matching
+### Member Matching Priority
 
-The bot tries to match Twitch usernames to Discord members using this priority:
+When account is not linked, the bot tries to match Twitch usernames to Discord members:
 1. ✅ Exact nickname match
 2. ✅ Exact username match
 3. ✅ Partial nickname match
 4. ✅ Partial username match
 
 **Tips for best results:**
+- Use `/linkaccount` for most reliable role assignment
 - Set Discord nicknames to match Twitch usernames
 - Or use the same username on both platforms
 
@@ -304,6 +418,11 @@ The bot supports multiple Discord servers, each with:
 - `twitch.checkInterval`: Default 60000ms (1 minute)
 - `youtube.checkInterval`: Default 300000ms (5 minutes)
 
+### Status Rotation
+
+- Default rotation interval: 30 seconds
+- Configurable in `index.js` by changing the `setInterval` value
+
 ### Message Placeholders
 
 **Twitch:**
@@ -316,20 +435,16 @@ The bot supports multiple Discord servers, each with:
 - `{channel}`: Channel name
 - `{title}`: Video title
 
-## What's New in v0.0.7
+## What's New in v0.0.9
 
-### 🎭 Live Role Management
-- Automatic role assignment when streamers go live
-- Automatic role removal when streamers go offline
-- Smart Discord member matching by Twitch username
-- Member ID caching for performance
-- Optional feature - works with or without it
-
-### 🛠️ Enhanced Commands
-- `/setup` now accepts optional `liverole` parameter
-- New `/setrole` command for role management
-- New `/removerole` command for removing role config
-- Role hierarchy and permission validation
+### 🎮 Bot Status Management
+- Automatic status rotation from `status.json`
+- Changes status every 30 seconds
+- Custom status override for admins
+- Pauses rotation when custom status is active
+- New `/customstatus` command (Admin only)
+- New `/clearstatus` command (Admin only)
+- Support for all Discord activity types
 
 See [changelog.md](changelog.md) for complete version history.
 
@@ -342,7 +457,9 @@ See [changelog.md](changelog.md) for complete version history.
 - **New notifications only on**:
   - Initial go-live
   - Game/category changes (prevents spam during long streams)
-- Role management requires **SERVER MEMBERS INTENT** to be enabled
+- Role management requires **SERVER MEMBERS INTENT** and **PRESENCE INTENT** to be enabled
+- Status messages are loaded once on startup (requires restart to reload changes)
+- Custom status persists until manually cleared with `/clearstatus`
 
 ## Troubleshooting
 
@@ -350,6 +467,11 @@ See [changelog.md](changelog.md) for complete version history.
 - **Bot not posting**: Check channel ID and bot permissions
 - **Commands not appearing**: Wait a few minutes for slash commands to register
 - **Missing notifications**: Check console for errors
+
+### Status Issues
+- **Status not changing**: Check if custom status is active (`/clearstatus` to clear)
+- **Status messages not loading**: Verify `status.json` is valid JSON
+- **Custom status not working**: Ensure you have Administrator permission
 
 ### Twitch Issues
 - **Not detecting streams**: Verify Twitch client ID and secret in `.env`
@@ -362,9 +484,10 @@ See [changelog.md](changelog.md) for complete version history.
 
 ### Role Management Issues
 - **Roles not being assigned**:
-  - ✅ Check that **SERVER MEMBERS INTENT** is enabled in Discord Developer Portal
+  - ✅ Check that **SERVER MEMBERS INTENT** and **PRESENCE INTENT** are enabled
   - ✅ Ensure bot's role is **higher** than the live role in role hierarchy
-  - ✅ Verify Discord username/nickname matches Twitch username
+  - ✅ Link your Twitch account with `/linkaccount` (most reliable method)
+  - ✅ Verify Discord username/nickname matches Twitch username (if not linked)
   - ✅ Check console for "Could not find Discord member" messages
 - **Permission errors**: 
   - ✅ Bot needs "Manage Roles" permission
@@ -379,6 +502,9 @@ Enable debug logging by checking the console output. Look for:
 - `✅ Assigned live role to [user]` - Role successfully assigned
 - `❌ Removed live role from [user]` - Role successfully removed
 - `Could not find Discord member for Twitch user [username]` - Member matching failed
+- `Loaded X status message(s) from status.json` - Status file loaded successfully
+- `✅ Custom status set: [type] - [text]` - Custom status activated
+- `✅ Custom status cleared, rotation resumed` - Rotation resumed
 
 ## Permissions Checklist
 
@@ -390,6 +516,7 @@ Enable debug logging by checking the console output. Look for:
 
 ✅ **Required Privileged Intents:**
 - SERVER MEMBERS INTENT (for role management)
+- PRESENCE INTENT (for automatic role via streaming detection)
 - MESSAGE CONTENT INTENT (legacy support)
 
 ✅ **Role Hierarchy:**
@@ -401,6 +528,6 @@ For issues, feature requests, or questions, please open an issue on the project 
 
 ## Version
 
-**Current Version:** BETA 0.0.7
+**Current Version:** BETA 0.0.9
 
 See [changelog.md](changelog.md) for full version history and changes.
