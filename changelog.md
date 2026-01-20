@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [BETA 0.0.7] - 2026-01-20
+
+### Added
+- **Live Streamer Role Management**: Automatic role assignment/removal for live streamers
+  - Configurable role that gets assigned when streamers go live
+  - Automatically removed when streamers go offline
+  - Optional feature - bot works with or without it
+  - Smart Discord member matching by Twitch username
+  - Member ID caching for efficient role management
+- **Enhanced `/setup` Command**: Now includes optional live role parameter
+  - Single command setup: `/setup channel:#notifications liverole:@LiveNow`
+  - Can still be used without role: `/setup channel:#notifications`
+  - Combined notification channel and role configuration
+- **New `/setrole` Command**: Manage live streamer role independently
+  - Add role: `/setrole role:@LiveNow`
+  - Update role: `/setrole role:@NewRole`
+  - Remove role: `/setrole` (no parameters)
+  - Validates bot permissions and role hierarchy
+  - Prevents assignment of managed roles (integration roles)
+- **New `/removerole` Command**: Alias for removing live role configuration
+  - Alternative to `/setrole` with no parameters
+  - Provides clear feedback about manual role cleanup needed
+- **Live Role Configuration Storage**: Added `liveRoleId` field to guild configs
+  - Stored in `config.json` per guild
+  - Persists across bot restarts
+  - Automatically initialized as `null` for new guilds
+
+### Changed
+- **Twitch Monitor (`modules/twitch.js`)**:
+  - Modified `liveStreamers` Map structure to store `{game_id, memberId}` objects
+  - Added `findMemberByTwitchUsername()` method for Discord member discovery
+    - Tries exact nickname match first
+    - Falls back to exact username match
+    - Then tries partial nickname match
+    - Finally tries partial username match
+  - Added `assignLiveRole()` method for role assignment
+    - Validates role exists in guild
+    - Checks if member already has role
+    - Caches member ID for future operations
+    - Handles permission errors gracefully
+  - Added `removeLiveRole()` method for role removal
+    - Uses cached member ID when available
+    - Falls back to member search if needed
+    - Only removes if member has the role
+  - Updated `checkStreams()` to integrate role management
+    - Assigns role on first go-live
+    - Removes role when going offline
+    - Maintains member ID cache throughout stream
+- **Config Utilities (`utils/config.js`)**:
+  - Added `liveRoleId: null` to default guild configuration template
+  - Ensures all new guilds have role field initialized
+- **Configuration Structure (`config.json`)**:
+  - Added `liveRoleId` field to guild configuration schema
+  - Maintains backward compatibility with existing configs
+
+### Technical Details
+- Role assignment uses Discord.js `GuildMember.roles.add()` and `.remove()`
+- Member matching uses case-insensitive comparison for flexibility
+- Comprehensive error handling for role operations
+- Enhanced logging with role assignment/removal events
+- Efficient caching prevents repeated member lookups
+- Bot role hierarchy validation prevents permission errors
+
+### Security & Validation
+- Validates bot's role is higher than target role in hierarchy
+- Prevents assignment of managed roles (e.g., bot integration roles)
+- Checks role existence before operations
+- Graceful handling of missing members or roles
+
+---
+
 ## [BETA 0.0.6] - 2026-01-18
 
 ### Added
@@ -80,7 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Twitch 400 errors for non-existent users (now validated before adding)
 - Modal timeout issues with deferred replies
 - Missing validation for malformed Twitch usernames
-- `nudgetwitch` command error: "checkSpecificStreams is not a function"
+- `nudgetwitch` command error: "checkSpecificStreamers is not a function"
 - Notification spam during long streams (now only notifies on game changes)
 
 ### Technical Details
