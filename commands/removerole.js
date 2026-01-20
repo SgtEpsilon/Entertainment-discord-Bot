@@ -1,14 +1,10 @@
-// commands/removerole.js
-// NOTE: This command is now redundant as /setrole can remove the role when called without parameters
-// You can delete this file or keep it as an alias for users who prefer explicit commands
-
+const { SlashCommandBuilder } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {
-  data: {
-    name: 'removerole',
-    description: 'Remove the live streamer role configuration'
-  },
+  data: new SlashCommandBuilder()
+    .setName('removerole')
+    .setDescription('Remove the live streamer role configuration'),
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);

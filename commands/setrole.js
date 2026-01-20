@@ -1,23 +1,21 @@
-// commands/setrole.js
+const { SlashCommandBuilder } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {
-  data: {
-    name: 'setrole',
-    description: 'Set or update the role to assign when streamers go live',
-    options: [{
-      name: 'role',
-      description: 'The role to assign to live streamers (leave empty to remove)',
-      type: 8, // ROLE type
-      required: false
-    }]
-  },
+  data: new SlashCommandBuilder()
+    .setName('setrole')
+    .setDescription('Set or update the role to assign when streamers go live')
+    .addRoleOption(option =>
+      option
+        .setName('role')
+        .setDescription('The role to assign to live streamers (leave empty to remove)')
+        .setRequired(false)
+    ),
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);
     const role = interaction.options.getRole('role');
     
-    // If no role provided, remove the configuration
     if (!role) {
       if (!guildConfig.liveRoleId) {
         return interaction.reply('❌ No live role is currently configured!');
@@ -35,7 +33,6 @@ module.exports = {
       return;
     }
     
-    // Check if the bot can manage this role
     const botMember = await interaction.guild.members.fetch(client.user.id);
     const botHighestRole = botMember.roles.highest;
     

@@ -1,90 +1,98 @@
-const { getGuildConfig, saveConfig } = require('../utils/config');
-const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+const { getGuildConfig } = require('../utils/config');
 
 module.exports = {
-  data: {
-    name: 'removestreamer',
-    description: 'Remove a Twitch streamer from the monitoring list'
-  },
+  data: new SlashCommandBuilder()
+    .setName('liststreamers')
+    .setDescription('Show all monitored Twitch streamers'),
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);
     
     if (guildConfig.twitch.usernames.length === 0) {
-      return interaction.reply('📋 No Twitch streamers are currently being monitored.');
+      return interaction.reply('📋 No streamers are currently being monitored.');
     }
     
-    const options = guildConfig.twitch.usernames.map(username => 
-      new StringSelectMenuOptionBuilder()
+    const embed = new EmbedBuilder()
+      .setColor('#9146FF')
+      .setTitle('📋 Monitored Twitch Streamers')
+      .setDescription(`Total: ${guildConfig.twitch.usernames.length} streamer(s)`)
+      .setTimestamp();
+    
+    const streamerList = guildConfig.twitch.usernames.map((username, index) => {
+      const hasCustomMessage = guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username];
+      return `${index + 1}. **${username}** ${hasCustomMessage ? '(Custom notification ✨)' : ''}`;
+    }).join('\n');
+    
+    embed.addFields({
+      name: 'Streamers',
+      value: streamerList || 'None',
+      inline: false
+    });
+    
+    const options = guildConfig.twitch.usernames.slice(0, 25).map(username => {
+      const hasCustomMessage = guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username];
+      return new StringSelectMenuOptionBuilder()
         .setLabel(username)
+        .setDescription(hasCustomMessage ? 'Has custom notification' : 'Using default notification')
         .setValue(username)
-        .setEmoji('🎮')
-    );
+        .setEmoji('🎮');
+    });
     
     const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('remove-streamer-select')
-      .setPlaceholder('Select a streamer to remove')
+      .setCustomId('view-streamer-details')
+      .setPlaceholder('Select a streamer for more details')
       .addOptions(options);
     
     const row = new ActionRowBuilder().addComponents(selectMenu);
     
     const response = await interaction.reply({
-      content: '🗑️ **Select a Twitch streamer to remove:**',
+      embeds: [embed],
       components: [row],
       fetchReply: true
     });
     
-    // Wait for selection
     try {
       const collector = response.createMessageComponentCollector({
         filter: i => i.user.id === interaction.user.id,
-        time: 60000
+        time: 120000
       });
       
       collector.on('collect', async i => {
         const username = i.values[0];
-        const index = guildConfig.twitch.usernames.indexOf(username);
+        const hasCustomMessage = guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username];
         
-        if (index !== -1) {
-          guildConfig.twitch.usernames.splice(index, 1);
-          
-          // Also remove custom message if exists
-          if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
-            delete guildConfig.twitch.customMessages[username];
-          }
-          
-          if (saveConfig()) {
-            await i.update({
-              content: `✅ Removed **${username}** from the monitoring list!\n\nRemaining streamers: ${guildConfig.twitch.usernames.length}`,
-              components: []
-            });
-            console.log(`Guild ${interaction.guildId} removed ${username} from Twitch monitoring`);
-          } else {
-            await i.update({
-              content: '❌ Error saving configuration. Please try again.',
-              components: []
-            });
-          }
-        }
+        const detailEmbed = new EmbedBuilder()
+          .setColor('#9146FF')
+          .setTitle(`Streamer: ${username}`)
+          .setURL(`https://twitch.tv/${username}`)
+          .addFields(
+            { name: 'Twitch URL', value: `https://twitch.tv/${username}` },
+            { 
+              name: 'Notification Message', 
+              value: hasCustomMessage 
+                ? `\`\`\`${guildConfig.twitch.customMessages[username]}\`\`\`` 
+                : `\`\`\`${guildConfig.twitch.message}\`\`\`` 
+            },
+            { 
+              name: 'Message Type', 
+              value: hasCustomMessage ? '✨ Custom' : '📝 Default' 
+            }
+          )
+          .setTimestamp();
         
-        collector.stop();
+        await i.reply({
+          embeds: [detailEmbed],
+          ephemeral: true
+        });
       });
       
-      collector.on('end', (collected, reason) => {
-        if (reason === 'time') {
-          interaction.editReply({
-            content: '⏱️ Selection timed out.',
-            components: []
-          }).catch(console.error);
-        }
+      collector.on('end', () => {
+        interaction.editReply({ components: [] }).catch(console.error);
       });
       
     } catch (error) {
-      console.error('Error handling streamer removal:', error);
-      await interaction.editReply({
-        content: '❌ An error occurred. Please try again.',
-        components: []
-      });
+      console.error('Error handling streamer selection:', error);
     }
   }
 };

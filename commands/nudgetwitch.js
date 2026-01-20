@@ -1,12 +1,10 @@
-// commands/nudgetwitch.js
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const { getGuildConfig } = require('../utils/config');
-const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 
 module.exports = {
-  data: {
-    name: 'nudgetwitch',
-    description: 'Manually check for live Twitch streams and post them'
-  },
+  data: new SlashCommandBuilder()
+    .setName('nudgetwitch')
+    .setDescription('Manually check for live Twitch streams and post them'),
   
   async execute(interaction, client, config, monitors) {
     await interaction.deferReply();
@@ -22,20 +20,17 @@ module.exports = {
     }
     
     try {
-      // Check all streamers for this guild
       const liveStreams = await monitors.twitchMonitor.checkSpecificStreamers(guildConfig.twitch.usernames);
       
       if (liveStreams.length === 0) {
         return interaction.editReply('🔭 None of the monitored streamers are currently live.');
       }
       
-      // Get the notification channel
       const channel = await client.channels.fetch(guildConfig.channelId);
       if (!channel) {
         return interaction.editReply('❌ Could not find the notification channel. Please run `/setup` again.');
       }
       
-      // Create embed showing live streams
       const listEmbed = new EmbedBuilder()
         .setColor('#9146FF')
         .setTitle('🔴 Live Streams Found')
@@ -50,7 +45,6 @@ module.exports = {
         });
       });
 
-      // Create dropdown options
       const options = [
         new StringSelectMenuOptionBuilder()
           .setLabel('✅ Post All Streams')
@@ -59,7 +53,6 @@ module.exports = {
           .setEmoji('📤')
       ];
 
-      // Add individual stream options (up to 24 more)
       liveStreams.slice(0, 24).forEach((stream, index) => {
         const hasCustomMessage = guildConfig.twitch.customMessages && 
                                  guildConfig.twitch.customMessages[stream.user_login];
@@ -85,7 +78,6 @@ module.exports = {
         components: [row]
       });
 
-      // Handle selection
       const collector = response.createMessageComponentCollector({
         filter: i => i.user.id === interaction.user.id,
         time: 120000
@@ -98,7 +90,6 @@ module.exports = {
           let postedCount = 0;
 
           if (selection === 'post-all') {
-            // Post all streams
             for (const stream of liveStreams) {
               await postStreamNotification(stream, guildConfig, channel);
               postedCount++;
@@ -111,7 +102,6 @@ module.exports = {
             });
             console.log(`Manual Twitch check by ${interaction.user.tag} in guild ${interaction.guildId}: posted ${postedCount} streams`);
           } else {
-            // Post individual stream
             const streamIndex = parseInt(selection.split('-')[1]);
             const stream = liveStreams[streamIndex];
 
@@ -153,29 +143,22 @@ module.exports = {
   }
 };
 
-/**
- * Helper function to post a stream notification
- */
 async function postStreamNotification(stream, guildConfig, channel) {
   const username = stream.user_login;
-  
-  // Check if there's a custom message for this streamer
-  let messageText = guildConfig.twitch.message; // Default message
+  let messageText = guildConfig.twitch.message;
   
   if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
     messageText = guildConfig.twitch.customMessages[username];
   }
   
-  // Replace placeholders in custom/default message
   messageText = messageText
     .replace(/{username}/g, stream.user_name)
     .replace(/{title}/g, stream.title)
     .replace(/{game}/g, stream.game_name || 'Unknown')
     .replace(/{url}/g, `https://twitch.tv/${stream.user_login}`);
 
-  // Create embed with stream preview
   const embed = new EmbedBuilder()
-    .setColor('#9146FF') // Twitch purple
+    .setColor('#9146FF')
     .setTitle(stream.title || 'Untitled Stream')
     .setURL(`https://twitch.tv/${stream.user_login}`)
     .setAuthor({
@@ -192,7 +175,6 @@ async function postStreamNotification(stream, guildConfig, channel) {
     .setTimestamp()
     .setFooter({ text: 'Twitch • Manual Check' });
 
-  // Create "Watch Now" button
   const button = new ButtonBuilder()
     .setLabel('Watch Now')
     .setStyle(ButtonStyle.Link)
@@ -201,7 +183,6 @@ async function postStreamNotification(stream, guildConfig, channel) {
 
   const row = new ActionRowBuilder().addComponents(button);
 
-  // Send message with embed and button
   await channel.send({
     content: messageText,
     embeds: [embed],

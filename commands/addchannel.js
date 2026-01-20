@@ -1,24 +1,22 @@
-// commands/addchannel.js
+const { SlashCommandBuilder } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 const { extractYouTubeChannelId } = require('../utils/youtube');
 
 module.exports = {
-  data: {
-    name: 'addchannel',
-    description: 'Add a YouTube channel to the monitoring list',
-    options: [{
-      name: 'channel',
-      description: 'YouTube channel URL, @handle, or channel ID (UC...)',
-      type: 3,
-      required: true
-    }]
-  },
+  data: new SlashCommandBuilder()
+    .setName('addchannel')
+    .setDescription('Add a YouTube channel to the monitoring list')
+    .addStringOption(option =>
+      option
+        .setName('channel')
+        .setDescription('YouTube channel URL, @handle, or channel ID (UC...)')
+        .setRequired(true)
+    ),
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);
     const input = interaction.options.getString('channel').trim();
     
-    // Extract channel ID from various formats (now using RSS feed validation)
     const channelId = await extractYouTubeChannelId(input);
     
     if (!channelId) {

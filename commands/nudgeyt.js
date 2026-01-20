@@ -1,6 +1,5 @@
-// commands/nudgeyt.js
+const { SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const { getGuildConfig } = require('../utils/config');
-const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const { parseString } = require('xml2js');
 const util = require('util');
@@ -8,10 +7,9 @@ const util = require('util');
 const parseXML = util.promisify(parseString);
 
 module.exports = {
-  data: {
-    name: 'nudgeyt',
-    description: 'Check and post latest YouTube videos'
-  },
+  data: new SlashCommandBuilder()
+    .setName('nudgeyt')
+    .setDescription('Check and post latest YouTube videos'),
   
   async execute(interaction, client, config, monitors) {
     const guildConfig = getGuildConfig(interaction.guildId);
