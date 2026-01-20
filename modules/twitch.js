@@ -185,10 +185,16 @@ class TwitchMonitor {
                 });
                 await this.assignLiveRole(guild, guildConfig, username);
               }
+              // If messageId is null, don't cache - let next check cycle retry
             } else if (lastNotification.game_id !== currentGameId) {
-              await this.updateNotification(stream, guildId, guildConfig, lastNotification);
-              liveMap.get(username).game_id = currentGameId;
-              console.log(`🎮 Updated notification for ${stream.user_name} - game changed to ${stream.game_name}`);
+              const updateSuccess = await this.updateNotification(stream, guildId, guildConfig, lastNotification);
+              // Only update the cached game_id if the notification update succeeded
+              if (updateSuccess) {
+                liveMap.get(username).game_id = currentGameId;
+                console.log(`🎮 Updated notification for ${stream.user_name} - game changed to ${stream.game_name}`);
+              } else {
+                console.log(`⚠️ Failed to update notification for ${stream.user_name}, will retry on next check`);
+              }
             }
           } else {
             if (liveMap.has(username)) {
@@ -275,19 +281,19 @@ class TwitchMonitor {
     try {
       if (!cachedData.messageId || !cachedData.channelId) {
         console.log(`No cached message ID for ${stream.user_name}, cannot update`);
-        return;
+        return false;
       }
 
       const channel = await this.client.channels.fetch(cachedData.channelId);
       if (!channel) {
         console.error(`Discord channel not found for guild ${guildId}`);
-        return;
+        return false;
       }
 
       const message = await channel.messages.fetch(cachedData.messageId);
       if (!message) {
         console.error(`Message ${cachedData.messageId} not found, cannot update`);
-        return;
+        return false;
       }
 
       const username = stream.user_login;
@@ -335,8 +341,10 @@ class TwitchMonitor {
         components: [row]
       });
 
+      return true;
     } catch (error) {
       console.error(`Error updating notification for guild ${guildId}:`, error.message);
+      return false;
     }
   }
 
