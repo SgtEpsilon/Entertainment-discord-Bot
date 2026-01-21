@@ -20,6 +20,101 @@ const client = new Discord.Client({
   ]
 });
 
+// Load status messages from status.json
+let statusMessages = [];
+try {
+  const statusData = fs.readFileSync(path.join(__dirname, 'status.json'), 'utf8');
+  statusMessages = JSON.parse(statusData);
+  console.log(`Loaded ${statusMessages.length} status message(s) from status.json`);
+} catch (error) {
+  console.warn('[WARNING] Could not load status.json, using default status messages');
+  statusMessages = [
+    { type: 'WATCHING', text: 'for new streams' },
+    { type: 'WATCHING', text: 'Twitch streamers' },
+    { type: 'WATCHING', text: 'YouTube uploads' },
+    { type: 'PLAYING', text: 'with notifications' },
+    { type: 'LISTENING', text: 'to stream alerts' },
+    { type: 'STREAMING', text: 'live updates', url: 'https://twitch.tv' }
+  ];
+}
+
+// Custom status management
+let customStatusActive = false;
+let statusInterval = null;
+
+// Function to set a specific status
+function setStatus(client, type, text, url = null) {
+  const activityOptions = {
+    name: text
+  };
+  
+  // Handle activity type - use ActivityType enum for v14+, string for v13
+  if (Discord.ActivityType) {
+    activityOptions.type = Discord.ActivityType[type === 'PLAYING' ? 'Playing' : 
+                                                  type === 'STREAMING' ? 'Streaming' :
+                                                  type === 'LISTENING' ? 'Listening' :
+                                                  type === 'WATCHING' ? 'Watching' :
+                                                  type === 'COMPETING' ? 'Competing' : 'Playing'];
+  } else {
+    activityOptions.type = type;
+  }
+  
+  if (url) {
+    activityOptions.url = url;
+  }
+  
+  client.user.setPresence({
+    activities: [activityOptions],
+    status: 'online'
+  });
+}
+
+// Function to set random status
+function setRandomStatus(client) {
+  if (customStatusActive) {
+    return; // Don't change status if custom status is active
+  }
+  
+  if (statusMessages.length === 0) {
+    console.warn('[WARNING] No status messages available');
+    return;
+  }
+  
+  const status = statusMessages[Math.floor(Math.random() * statusMessages.length)];
+  setStatus(client, status.type, status.text, status.url);
+}
+
+// Function to set custom status and pause rotation
+function setCustomStatus(type, text, url = null) {
+  if (!client.user) {
+    console.error('[ERROR] Client is not ready yet');
+    return false;
+  }
+  
+  customStatusActive = true;
+  setStatus(client, type, text, url);
+  console.log(`✅ Custom status set: ${type} - ${text}`);
+  return true;
+}
+
+// Function to clear custom status and resume rotation
+function clearCustomStatus() {
+  if (!client.user) {
+    console.error('[ERROR] Client is not ready yet');
+    return false;
+  }
+  
+  customStatusActive = false;
+  setRandomStatus(client);
+  console.log('✅ Custom status cleared, rotation resumed');
+  return true;
+}
+
+// Export functions for use in commands or external scripts
+client.setCustomStatus = setCustomStatus;
+client.clearCustomStatus = clearCustomStatus;
+client.getCustomStatusActive = () => customStatusActive;
+
 // Collection to store commands
 client.commands = new Discord.Collection();
 
@@ -47,6 +142,12 @@ const readyEvent = client.events?.ready ? 'clientReady' : 'ready';
 
 client.once(readyEvent, async () => {
   console.log(`Logged in as ${client.user.tag}`);
+  
+  // Set initial status
+  setRandomStatus(client);
+  
+  // Change status every 30 seconds (30000 milliseconds)
+  statusInterval = setInterval(() => setRandomStatus(client), 30000);
   
   // Register slash commands
   const commands = client.commands.map(cmd => cmd.data);

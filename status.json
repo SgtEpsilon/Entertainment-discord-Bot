@@ -1,0 +1,8 @@
+[
+  { "type": "WATCHING", "text": "for new streams" },
+  { "type": "WATCHING", "text": "Twitch streamers" },
+  { "type": "WATCHING", "text": "YouTube uploads" },
+  { "type": "PLAYING", "text": "with notifications" },
+  { "type": "LISTENING", "text": "to stream alerts" },
+  { "type": "STREAMING", "text": "live updates", "url": "https://twitch.tv" }
+]

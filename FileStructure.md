@@ -8,6 +8,8 @@ discord-streaming-bot/
 ├── commands/                  # Slash command handlers (alphabetical)
 │   ├── addchannel.js         # /addchannel - Add YouTube channel
 │   ├── addstreamer.js        # /addstreamer - Add Twitch streamer
+│   ├── clearstatus.js        # /clearstatus - Clear custom bot status and resume rotation
+│   ├── customstatus.js       # /customstatus - Set custom bot status (pauses rotation)
 │   ├── help.js               # /help - Dynamic help menu
 │   ├── linkaccount.js        # /linkaccount - User self-link Twitch account
 │   ├── listchannels.js       # /listchannels - List YouTube channels
@@ -38,7 +40,8 @@ discord-streaming-bot/
 ├── index.js                  # Main bot entry point
 ├── package.json              # Project dependencies
 ├── package-lock.json         # Locked dependency versions (auto-generated)
-└── README.md                 # Documentation
+├── README.md                 # Documentation
+└── status.json               # Bot status messages (auto-generated)
 
 ```
 
@@ -55,12 +58,23 @@ discord-streaming-bot/
   - `presenceUpdate` - Detects streaming status for auto role assignment
   - `guildDelete` - Cleans up config when bot is removed from server
 - Initializes TwitchMonitor and YouTubeMonitor
+- **Bot Status Management**:
+  - Loads status messages from `status.json`
+  - Rotates status every 30 seconds
+  - Custom status functions: `setCustomStatus()`, `clearCustomStatus()`, `getCustomStatusActive()`
+  - Pauses rotation when custom status is active
 - Requires intents: Guilds, GuildMessages, MessageContent, GuildMembers, GuildPresences
 
 #### `config.json`
 - Auto-generated on first run (start with `{"guilds":{}}`)
 - Stores per-guild configuration
 - Updated by commands and saved via `utils/config.js`
+
+#### `status.json`
+- Auto-generated on first run
+- Stores bot status messages for rotation
+- JSON array of status objects with `type`, `text`, and optional `url`
+- Editable without restarting the bot (requires restart to reload)
 
 #### `changelog.md`
 - Version history
@@ -87,9 +101,22 @@ All commands use `SlashCommandBuilder` for dynamic loading and export:
 - Validates streamer exists via Twitch API
 - Supports custom notification messages with placeholders
 
+**`clearstatus.js`** - Clear custom bot status and resume rotation (Admin only)
+- Requires Administrator permission
+- Clears custom status set by `/customstatus`
+- Resumes automatic status rotation
+- Shows warning if no custom status is active
+
+**`customstatus.js`** - Set custom bot status (Admin only)
+- Requires Administrator permission
+- Pauses automatic status rotation
+- Supports all Discord activity types (Playing, Streaming, Listening, Watching, Competing)
+- Optional URL parameter for Streaming type
+- Validates required URL for Streaming type
+
 **`help.js`** - Dynamic help menu
 - Automatically discovers all loaded commands
-- Categorizes commands (Setup, Account Linking, Twitch, YouTube, Utility)
+- Categorizes commands (Setup, Bot Management, Account Linking, Twitch, YouTube, Utility)
 - Shows command descriptions pulled from SlashCommandBuilder
 - Displays total command count
 
@@ -228,7 +255,7 @@ All commands use `SlashCommandBuilder` for dynamic loading and export:
     usernames: [],
     checkInterval: 60000,
     message: "🔴 {username} is now live on Twitch!\n**{title}**\nPlaying: {game}",
-    linkedAccounts: {}  // NEW: Discord ID → Twitch username mapping
+    linkedAccounts: {}  // Discord ID → Twitch username mapping
   },
   youtube: {
     channelIds: [],
@@ -279,6 +306,25 @@ All commands use `SlashCommandBuilder` for dynamic loading and export:
 }
 ```
 
+### `status.json` Structure
+```json
+[
+  { "type": "WATCHING", "text": "for new streams" },
+  { "type": "WATCHING", "text": "Twitch streamers" },
+  { "type": "WATCHING", "text": "YouTube uploads" },
+  { "type": "PLAYING", "text": "with notifications" },
+  { "type": "LISTENING", "text": "to stream alerts" },
+  { "type": "STREAMING", "text": "live updates", "url": "https://twitch.tv" }
+]
+```
+
+**Available Activity Types:**
+- `PLAYING` - "Playing [text]"
+- `STREAMING` - "Streaming [text]" (requires URL)
+- `LISTENING` - "Listening to [text]"
+- `WATCHING` - "Watching [text]"
+- `COMPETING` - "Competing in [text]"
+
 ---
 
 ## Setup Instructions
@@ -294,9 +340,10 @@ cd discord-streaming-bot
 # Root files
 touch index.js .env .gitignore README.md changelog.md
 echo '{"guilds":{}}' > config.json
+echo '[{"type":"WATCHING","text":"for new streams"},{"type":"PLAYING","text":"with notifications"}]' > status.json
 
 # Commands (alphabetical)
-touch commands/{addchannel,addstreamer,help,linkaccount,listchannels,listlinks,liststreamers,manuallink,nudgetwitch,nudgeyt,removechannel,removerole,removestreamer,setrole,setup,unlinkaccount}.js
+touch commands/{addchannel,addstreamer,clearstatus,customstatus,help,linkaccount,listchannels,listlinks,liststreamers,manuallink,nudgetwitch,nudgeyt,removechannel,removerole,removestreamer,setrole,setup,unlinkaccount}.js
 
 # Modules
 touch modules/{twitch,youtube}.js
@@ -335,6 +382,23 @@ npm start
 
 ## Features Overview
 
+### Bot Status Management (v0.0.9+)
+**Automatic Status Rotation:**
+1. Bot loads status messages from `status.json` on startup
+2. Randomly selects and displays a status
+3. Changes status every 30 seconds
+4. Supports all Discord activity types
+
+**Custom Status Control (Admin Only):**
+1. Admin runs `/customstatus type:Playing text:Maintenance Mode`
+2. Automatic rotation pauses
+3. Custom status remains until cleared
+4. Admin runs `/clearstatus` to resume rotation
+
+**Status Priority:**
+1. Custom status (if set) - Pauses rotation
+2. Automatic rotation from `status.json` - Normal operation
+
 ### Live Role Management (v0.0.8+)
 **Manual Account Linking:**
 1. User runs `/linkaccount` or admin runs `/manuallink`
@@ -361,6 +425,7 @@ npm start
 
 ### Command Categories
 - **Server Setup**: setup, setrole, removerole
+- **Bot Management**: customstatus, clearstatus
 - **Account Linking**: linkaccount, manuallink, unlinkaccount, listlinks
 - **Twitch Monitoring**: addstreamer, removestreamer, liststreamers, nudgetwitch
 - **YouTube Monitoring**: addchannel, removechannel, listchannels, nudgeyt
@@ -379,4 +444,5 @@ npm start
 ✅ **Message Editing** - No spam from game changes  
 ✅ **Multi-Guild Support** - Separate config per server  
 ✅ **Caching System** - Efficient API usage  
-✅ **Error Handling** - Graceful failures with user feedback
+✅ **Error Handling** - Graceful failures with user feedback  
+✅ **Custom Bot Status** - Configurable presence with admin controls
