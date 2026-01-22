@@ -110,10 +110,17 @@ function clearCustomStatus() {
   return true;
 }
 
+// Function to reload status messages from status.json
+function reloadStatuses(newStatuses) {
+  statusMessages = newStatuses;
+  console.log(`✅ Status messages reloaded: ${newStatuses.length} statuses`);
+}
+
 // Export functions for use in commands or external scripts
 client.setCustomStatus = setCustomStatus;
 client.clearCustomStatus = clearCustomStatus;
 client.getCustomStatusActive = () => customStatusActive;
+client.reloadStatuses = reloadStatuses;
 
 // Collection to store commands
 client.commands = new Discord.Collection();
