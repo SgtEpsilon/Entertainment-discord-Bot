@@ -10,7 +10,7 @@ module.exports = {
 
   async execute(interaction, client, config) {
     // Check if user is admin
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
       return await interaction.reply({
         content: '❌ This command is only available to administrators.',
         ephemeral: true
