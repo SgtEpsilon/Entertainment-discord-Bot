@@ -1,6 +1,7 @@
 // commands/reloadstatus.js
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,7 +20,9 @@ module.exports = {
 
     try {
       // Check if status.json exists
-      if (!fs.existsSync('./status.json')) {
+      const statusPath = path.join(__dirname, '..', 'status.json');
+      
+      if (!fs.existsSync(statusPath)) {
         return await interaction.reply({
           content: '❌ status.json file not found!',
           ephemeral: true
@@ -27,7 +30,7 @@ module.exports = {
       }
 
       // Read and parse status.json
-      const statusData = fs.readFileSync('./status.json', 'utf8');
+      const statusData = fs.readFileSync(statusPath, 'utf8');
       const newStatuses = JSON.parse(statusData);
 
       // Validate the data
