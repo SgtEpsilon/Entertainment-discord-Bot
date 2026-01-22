@@ -5,11 +5,19 @@ const { getGuildConfig, saveConfig } = require('../utils/config');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('unlinkaccount')
-    .setDescription('Unlink your Twitch account or remove another user\'s link (Admin)'),
+    .setDescription('Unlink a user\'s Twitch account (Admin only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction, client, config) {
+    // Check if user is admin
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return await interaction.reply({
+        content: '❌ This command is only available to administrators.',
+        ephemeral: true
+      });
+    }
+
     const guildConfig = getGuildConfig(interaction.guild.id);
-    const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
 
     // Initialize guildConfig.twitch if it doesn't exist
     if (!guildConfig.twitch) {
@@ -21,51 +29,34 @@ module.exports = {
       guildConfig.twitch.linkedAccounts = {};
     }
 
-    // Check if user has their own link
-    const userLinked = guildConfig.twitch.linkedAccounts[interaction.user.id];
-
     // Build options for dropdown
     const options = [];
 
-    // Add self-unlink option if user has a link
-    if (userLinked) {
-      options.push({
-        label: `Unlink Yourself (${userLinked})`,
-        description: 'Remove your own Twitch account link',
-        value: `self_${interaction.user.id}`,
-        emoji: '👤'
-      });
-    }
-
-    // Add other users if admin
-    if (isAdmin) {
-      for (const [discordId, twitchUsername] of Object.entries(guildConfig.twitch.linkedAccounts)) {
-        if (discordId !== interaction.user.id) {
-          try {
-            const user = await client.users.fetch(discordId);
-            options.push({
-              label: `${user.tag}`,
-              description: `Twitch: ${twitchUsername}`,
-              value: discordId,
-              emoji: '🔗'
-            });
-          } catch (error) {
-            // User not found
-            options.push({
-              label: `Unknown User`,
-              description: `Twitch: ${twitchUsername}`,
-              value: discordId,
-              emoji: '❓'
-            });
-          }
-        }
+    // Add all linked accounts
+    for (const [discordId, twitchUsername] of Object.entries(guildConfig.twitch.linkedAccounts)) {
+      try {
+        const user = await client.users.fetch(discordId);
+        options.push({
+          label: `${user.tag}`,
+          description: `Twitch: ${twitchUsername}`,
+          value: discordId,
+          emoji: '🔗'
+        });
+      } catch (error) {
+        // User not found
+        options.push({
+          label: `Unknown User`,
+          description: `Twitch: ${twitchUsername}`,
+          value: discordId,
+          emoji: '❓'
+        });
       }
     }
 
     // Check if there are any options
     if (options.length === 0) {
       return await interaction.reply({
-        content: '❌ No linked accounts to unlink.' + (!isAdmin ? '\n\n*You don\'t have a linked account.*' : ''),
+        content: '❌ No linked accounts to unlink.',
         ephemeral: true
       });
     }
@@ -98,7 +89,7 @@ module.exports = {
         });
       }
 
-      const selectedId = i.values[0].replace('self_', '');
+      const selectedId = i.values[0];
       const linkedUsername = guildConfig.twitch.linkedAccounts[selectedId];
 
       if (!linkedUsername) {
@@ -121,14 +112,12 @@ module.exports = {
       delete guildConfig.twitch.linkedAccounts[selectedId];
       saveConfig();
 
-      const isSelf = selectedId === interaction.user.id;
-
       await i.update({
-        content: `✅ Successfully unlinked ${isSelf ? 'your' : `**${userTag}**'s`} Twitch account (**${linkedUsername}**)`,
+        content: `✅ Successfully unlinked **${userTag}**'s Twitch account (**${linkedUsername}**)`,
         components: []
       });
 
-      console.log(`🔓 ${isSelf ? 'User' : `Admin ${interaction.user.tag} unlinked`} ${userTag} (${selectedId}) from Twitch account: ${linkedUsername}`);
+      console.log(`🔓 Admin ${interaction.user.tag} unlinked ${userTag} (${selectedId}) from Twitch account: ${linkedUsername}`);
 
       collector.stop();
     });
