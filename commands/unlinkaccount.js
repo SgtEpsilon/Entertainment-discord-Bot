@@ -1,16 +1,17 @@
 // commands/unlinkaccount.js
-const { SlashCommandBuilder, PermissionFlagsBits, StringSelectMenuBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
+const { SlashCommandBuilder, StringSelectMenuBuilder, ActionRowBuilder, ComponentType } = require('@discordjs/builders');
+const { Permissions } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('unlinkaccount')
     .setDescription('Unlink a user\'s Twitch account (Admin only)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
 
   async execute(interaction, client, config) {
     // Check if user is admin
-    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+    if (!interaction.memberPermissions?.has(Permissions.FLAGS.ADMINISTRATOR)) {
       return await interaction.reply({
         content: '❌ This command is only available to administrators.',
         ephemeral: true

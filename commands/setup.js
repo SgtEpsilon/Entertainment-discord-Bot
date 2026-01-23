@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder } = require('@discordjs/builders');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {
@@ -9,7 +9,6 @@ module.exports = {
       option
         .setName('channel')
         .setDescription('The channel to send notifications to')
-        .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     )
     .addRoleOption(option =>
@@ -24,7 +23,7 @@ module.exports = {
     const channel = interaction.options.getChannel('channel');
     const role = interaction.options.getRole('liverole');
     
-    if (!channel.isTextBased()) {
+    if (!channel.isText()) {
       return interaction.reply('❌ Please select a text channel!');
     }
     

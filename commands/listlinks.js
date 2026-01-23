@@ -1,12 +1,14 @@
 // commands/listlinks.js
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const { Permissions } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const { getGuildConfig } = require('../utils/config');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('listlinks')
     .setDescription('List all linked Twitch accounts (Admin only)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
 
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guild.id);

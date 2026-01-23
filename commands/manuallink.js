@@ -1,12 +1,13 @@
 // commands/manuallink.js
-const { SlashCommandBuilder, PermissionFlagsBits, UserSelectMenuBuilder, ActionRowBuilder, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { SlashCommandBuilder, UserSelectMenuBuilder, ActionRowBuilder, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('@discordjs/builders');
+const { Permissions } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('manuallink')
     .setDescription('Manually link a user\'s Discord account to their Twitch username (Admin only)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
 
   async execute(interaction, client, config) {
     // Create user select menu

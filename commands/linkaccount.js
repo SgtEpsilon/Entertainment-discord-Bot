@@ -1,5 +1,5 @@
 // commands/linkaccount.js
-const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('@discordjs/builders');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {

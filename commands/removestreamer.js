@@ -1,11 +1,12 @@
-const { SlashCommandBuilder, PermissionFlagsBits, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('@discordjs/builders');
+const { Permissions } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('removestreamer')
     .setDescription('Remove a Twitch streamer from the monitoring list')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
   
   async execute(interaction, client, config) {
     const guildConfig = getGuildConfig(interaction.guildId);

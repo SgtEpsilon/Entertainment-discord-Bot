@@ -1,5 +1,6 @@
 // commands/reloadstatus.js
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const { Permissions } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -7,11 +8,11 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('reloadstatus')
     .setDescription('Reload status messages from status.json without restarting the bot')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
 
   async execute(interaction, client) {
     // Double-check permissions (redundant but safe)
-    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+    if (!interaction.memberPermissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
       return await interaction.reply({
         content: '❌ You need Administrator permission to use this command.',
         ephemeral: true

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require('@discordjs/builders');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {

@@ -1,5 +1,5 @@
 const { getGuildConfig } = require('../utils/config');
-const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('@discordjs/builders');
 
 module.exports = {
   data: {

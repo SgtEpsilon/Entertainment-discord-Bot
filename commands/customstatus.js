@@ -1,10 +1,11 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const { Permissions } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('customstatus')
     .setDescription('Set a custom bot status (pauses rotation)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR)
     .addStringOption(option =>
       option.setName('type')
         .setDescription('Status type')
@@ -27,7 +28,7 @@ module.exports = {
 
   async execute(interaction, client) {
     // Double-check permissions (redundant but safe)
-    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+    if (!interaction.memberPermissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
       return await interaction.reply({
         content: '❌ You need Administrator permission to use this command.',
         ephemeral: true
