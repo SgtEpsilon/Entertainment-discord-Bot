@@ -223,8 +223,10 @@ class TwitchMonitor {
             // Streamer is offline
             if (liveMap.has(username)) {
               const cachedData = liveMap.get(username);
+              // Always remove the live role when streamer goes offline
               await this.removeLiveRole(guild, guildConfig, username, cachedData?.memberId);
               liveMap.delete(username);
+              console.log(`📴 ${username} went offline in guild ${guild.id}, removed live role`);
             }
           }
         } catch (error) {
