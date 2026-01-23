@@ -7,7 +7,7 @@ class TwitchMonitor {
     this.client = client;
     this.config = config;
     this.accessToken = null;
-    this.liveStreamers = new Map();
+    this.liveStreamers = new Map(); // Map of guildId -> Map of username -> { game_id, messageId, stream_id, memberId, channelId }
     this.connectedAccountsCache = new Map();
   }
 
@@ -171,24 +171,46 @@ class TwitchMonitor {
 
           if (stream && stream.type === 'live') {
             const currentGameId = stream.game_id;
+            const currentStreamId = stream.id; // Unique ID for this specific stream session
             const lastNotification = liveMap.get(username);
 
             if (!lastNotification) {
+              // First time going live - send new notification
               const messageId = await this.sendNotification(stream, guildId, guildConfig);
-              // Only set liveMap and assign role if sendNotification returned a valid messageId
               if (messageId) {
                 liveMap.set(username, { 
                   game_id: currentGameId, 
                   memberId: null,
                   messageId: messageId,
-                  channelId: guildConfig.channelId
+                  channelId: guildConfig.channelId,
+                  stream_id: currentStreamId
                 });
                 await this.assignLiveRole(guild, guildConfig, username);
               }
-              // If messageId is null, don't cache - let next check cycle retry
+            } else if (lastNotification.stream_id !== currentStreamId) {
+              // Different stream session (they went offline and came back online)
+              // Send new notification first, then only update role if successful
+              const messageId = await this.sendNotification(stream, guildId, guildConfig);
+              if (messageId) {
+                // Only remove old role and assign new one if notification was successful
+                await this.removeLiveRole(guild, guildConfig, username, lastNotification.memberId);
+                
+                liveMap.set(username, { 
+                  game_id: currentGameId, 
+                  memberId: null,
+                  messageId: messageId,
+                  channelId: guildConfig.channelId,
+                  stream_id: currentStreamId
+                });
+                
+                await this.assignLiveRole(guild, guildConfig, username);
+                console.log(`🔄 New stream session detected for ${stream.user_name} (Stream ID: ${currentStreamId})`);
+              } else {
+                console.log(`⚠️ Failed to send notification for new stream session of ${stream.user_name}, will retry on next check`);
+              }
             } else if (lastNotification.game_id !== currentGameId) {
+              // Same stream session but game changed - update existing notification
               const updateSuccess = await this.updateNotification(stream, guildId, guildConfig, lastNotification);
-              // Only update the cached game_id if the notification update succeeded
               if (updateSuccess) {
                 liveMap.get(username).game_id = currentGameId;
                 console.log(`🎮 Updated notification for ${stream.user_name} - game changed to ${stream.game_name}`);
@@ -196,11 +218,15 @@ class TwitchMonitor {
                 console.log(`⚠️ Failed to update notification for ${stream.user_name}, will retry on next check`);
               }
             }
+            // else: same stream, same game - no action needed (skip duplicate)
           } else {
+            // Streamer is offline
             if (liveMap.has(username)) {
               const cachedData = liveMap.get(username);
+              // Always remove the live role when streamer goes offline
               await this.removeLiveRole(guild, guildConfig, username, cachedData?.memberId);
               liveMap.delete(username);
+              console.log(`📴 ${username} went offline in guild ${guild.id}, removed live role`);
             }
           }
         } catch (error) {
@@ -268,7 +294,7 @@ class TwitchMonitor {
         components: [row]
       });
 
-      console.log(`Sent Twitch notification for ${stream.user_name} to guild ${guildId}${guildConfig.twitch.customMessages?.[username] ? ' (custom message)' : ''}`);
+      console.log(`Sent Twitch notification for ${stream.user_name} to guild ${guildId} (Stream ID: ${stream.id})${guildConfig.twitch.customMessages?.[username] ? ' (custom message)' : ''}`);
       
       return message.id;
     } catch (error) {
@@ -318,7 +344,7 @@ class TwitchMonitor {
           iconURL: 'https://cdn.discordapp.com/attachments/your-attachment-id/twitch-icon.png',
           url: `https://twitch.tv/${stream.user_login}`
         })
-        .setDescription(`**Playing ${stream.game_name || 'Unknown'}**`)
+        .setDescription(`**Playing ${stream.game_name || 'Unknown'}** _(Game Changed)_`)
         .setImage(stream.thumbnail_url.replace('{width}', '1920').replace('{height}', '1080') + `?t=${Date.now()}`)
         .addFields(
           { name: '👁️ Viewers', value: stream.viewer_count.toLocaleString(), inline: true },

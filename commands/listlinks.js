@@ -1,17 +1,15 @@
-// commands/listlinks.js
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { getGuildConfig } = require('../utils/config');
+const { SlashCommandBuilder: SlashCommandBuilder3, PermissionFlagsBits, EmbedBuilder: EmbedBuilder2 } = require('discord.js');
+const { getGuildConfig: getGuildConfig3 } = require('../utils/config');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder3()
     .setName('listlinks')
     .setDescription('List all linked Twitch accounts (Admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction, client, config) {
-    const guildConfig = getGuildConfig(interaction.guild.id);
+    const guildConfig = getGuildConfig3(interaction.guild.id);
 
-    // Check if there are any linked accounts (with proper null checks)
     if (!guildConfig.twitch?.linkedAccounts || Object.keys(guildConfig.twitch.linkedAccounts).length === 0) {
       return await interaction.reply({
         content: '📋 No linked accounts found in this server.',
@@ -19,19 +17,17 @@ module.exports = {
       });
     }
 
-    // Build the list
     const links = [];
     for (const [discordId, twitchUsername] of Object.entries(guildConfig.twitch.linkedAccounts)) {
       try {
         const user = await client.users.fetch(discordId);
         links.push(`• **${user.tag}** → \`${twitchUsername}\``);
       } catch (error) {
-        // User not found (might have left the server)
         links.push(`• <@${discordId}> (Unknown User) → \`${twitchUsername}\``);
       }
     }
 
-    const embed = new EmbedBuilder()
+    const embed = new EmbedBuilder2()
       .setColor('#9146FF')
       .setTitle('🔗 Linked Twitch Accounts')
       .setDescription(links.join('\n') || 'No links found')

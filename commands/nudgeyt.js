@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const { getGuildConfig } = require('../utils/config');
 const axios = require('axios');
 const { parseString } = require('xml2js');
@@ -30,7 +30,6 @@ module.exports = {
       return interaction.editReply('🔴 No recent videos found for monitored channels.');
     }
 
-    // Fetch channel names for better display
     const channelNames = {};
     for (const channelId of guildConfig.youtube.channelIds) {
       try {
@@ -46,7 +45,6 @@ module.exports = {
       }
     }
 
-    // Create embed showing found videos
     const embed = new EmbedBuilder()
       .setColor('#FF0000')
       .setTitle('📺 Recent YouTube Videos Found')
@@ -65,24 +63,22 @@ module.exports = {
       });
     });
 
-    // Create dropdown options - limit to 25 (Discord limit)
     const options = [
-      new StringSelectMenuOptionBuilder()
-        .setLabel('✅ Post All Videos')
-        .setDescription(`Post all ${latestVideos.length} video(s) to the notification channel`)
-        .setValue('post-all')
-        .setEmoji('📤')
+      {
+        label: '✅ Post All Videos',
+        description: `Post all ${latestVideos.length} video(s) to the notification channel`,
+        value: 'post-all',
+        emoji: '📤'
+      }
     ];
 
-    // Add individual video options (up to 24 more, for a total of 25)
     latestVideos.slice(0, 24).forEach((video, index) => {
-      options.push(
-        new StringSelectMenuOptionBuilder()
-          .setLabel(`${video.snippet.channelTitle}`.substring(0, 100))
-          .setDescription(`${video.snippet.title}`.substring(0, 100))
-          .setValue(`video-${index}`)
-          .setEmoji('🎬')
-      );
+      options.push({
+        label: `${video.snippet.channelTitle}`.substring(0, 100),
+        description: `${video.snippet.title}`.substring(0, 100),
+        value: `video-${index}`,
+        emoji: '🎬'
+      });
     });
 
     const selectMenu = new StringSelectMenuBuilder()
@@ -97,7 +93,6 @@ module.exports = {
       components: [row]
     });
 
-    // Handle selection
     try {
       const collector = response.createMessageComponentCollector({
         filter: i => i.user.id === interaction.user.id,
@@ -111,7 +106,6 @@ module.exports = {
           const notificationChannel = await client.channels.fetch(guildConfig.channelId);
           
           if (selection === 'post-all') {
-            // Post all videos
             for (const video of latestVideos) {
               const message = guildConfig.youtube.message
                 .replace('{channel}', video.snippet.channelTitle)
@@ -128,7 +122,6 @@ module.exports = {
             });
             console.log(`Manual YouTube check by ${interaction.user.tag} in guild ${interaction.guildId}: posted ${latestVideos.length} videos`);
           } else {
-            // Post individual video
             const videoIndex = parseInt(selection.split('-')[1]);
             const video = latestVideos[videoIndex];
 

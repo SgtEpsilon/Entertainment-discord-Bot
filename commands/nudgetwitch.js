@@ -1,15 +1,15 @@
-const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
-const { getGuildConfig } = require('../utils/config');
+const { SlashCommandBuilder: SlashCommandBuilder2, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder: ActionRowBuilder2, StringSelectMenuBuilder } = require('discord.js');
+const { getGuildConfig: getGuildConfig2 } = require('../utils/config');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder2()
     .setName('nudgetwitch')
     .setDescription('Manually check for live Twitch streams and post them'),
   
   async execute(interaction, client, config, monitors) {
     await interaction.deferReply();
     
-    const guildConfig = getGuildConfig(interaction.guildId);
+    const guildConfig = getGuildConfig2(interaction.guildId);
     
     if (!guildConfig.channelId) {
       return interaction.editReply('❌ No notification channel set! Use `/setup` first.');
@@ -46,24 +46,24 @@ module.exports = {
       });
 
       const options = [
-        new StringSelectMenuOptionBuilder()
-          .setLabel('✅ Post All Streams')
-          .setDescription(`Post all ${liveStreams.length} live stream(s) to the notification channel`)
-          .setValue('post-all')
-          .setEmoji('📤')
+        {
+          label: '✅ Post All Streams',
+          description: `Post all ${liveStreams.length} live stream(s) to the notification channel`,
+          value: 'post-all',
+          emoji: '📤'
+        }
       ];
 
       liveStreams.slice(0, 24).forEach((stream, index) => {
         const hasCustomMessage = guildConfig.twitch.customMessages && 
                                  guildConfig.twitch.customMessages[stream.user_login];
         
-        options.push(
-          new StringSelectMenuOptionBuilder()
-            .setLabel(`${stream.user_name} - ${stream.game_name || 'Unknown'}`.substring(0, 100))
-            .setDescription(`${stream.viewer_count.toLocaleString()} viewers${hasCustomMessage ? ' • Custom notification' : ''}`.substring(0, 100))
-            .setValue(`stream-${index}`)
-            .setEmoji('🎮')
-        );
+        options.push({
+          label: `${stream.user_name} - ${stream.game_name || 'Unknown'}`.substring(0, 100),
+          description: `${stream.viewer_count.toLocaleString()} viewers${hasCustomMessage ? ' • Custom notification' : ''}`.substring(0, 100),
+          value: `stream-${index}`,
+          emoji: '🎮'
+        });
       });
 
       const selectMenu = new StringSelectMenuBuilder()
@@ -71,7 +71,7 @@ module.exports = {
         .setPlaceholder('Choose which streams to post')
         .addOptions(options);
 
-      const row = new ActionRowBuilder().addComponents(selectMenu);
+      const row = new ActionRowBuilder2().addComponents(selectMenu);
 
       const response = await interaction.editReply({
         embeds: [listEmbed],
@@ -181,7 +181,7 @@ async function postStreamNotification(stream, guildConfig, channel) {
     .setURL(`https://twitch.tv/${stream.user_login}`)
     .setEmoji('🔴');
 
-  const row = new ActionRowBuilder().addComponents(button);
+  const row = new ActionRowBuilder2().addComponents(button);
 
   await channel.send({
     content: messageText,

@@ -1,10 +1,10 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder: SlashCommandBuilder5, PermissionFlagsBits: PermissionFlagsBits3, ActivityType } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder5()
     .setName('customstatus')
     .setDescription('Set a custom bot status (pauses rotation)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDefaultMemberPermissions(PermissionFlagsBits3.Administrator)
     .addStringOption(option =>
       option.setName('type')
         .setDescription('Status type')
@@ -26,8 +26,7 @@ module.exports = {
         .setRequired(false)),
 
   async execute(interaction, client) {
-    // Double-check permissions (redundant but safe)
-    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+    if (!interaction.memberPermissions.has(PermissionFlagsBits3.Administrator)) {
       return await interaction.reply({
         content: '❌ You need Administrator permission to use this command.',
         ephemeral: true
@@ -38,7 +37,6 @@ module.exports = {
     const text = interaction.options.getString('text');
     const url = interaction.options.getString('url');
 
-    // Validate URL for streaming
     if (type === 'STREAMING' && !url) {
       return await interaction.reply({
         content: '❌ URL is required for Streaming status type!',
@@ -46,7 +44,6 @@ module.exports = {
       });
     }
 
-    // Set custom status
     const success = client.setCustomStatus(type, text, url);
 
     if (success) {

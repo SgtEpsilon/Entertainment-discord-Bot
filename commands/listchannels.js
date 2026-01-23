@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
-const { getGuildConfig } = require('../utils/config');
+const { SlashCommandBuilder: SlashCommandBuilder2, StringSelectMenuBuilder, ActionRowBuilder: ActionRowBuilder2, EmbedBuilder } = require('discord.js');
+const { getGuildConfig: getGuildConfig2 } = require('../utils/config');
 const axios = require('axios');
 const { parseString } = require('xml2js');
 const util = require('util');
@@ -7,12 +7,12 @@ const util = require('util');
 const parseXML = util.promisify(parseString);
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder2()
     .setName('listchannels')
     .setDescription('Show all monitored YouTube channels'),
   
   async execute(interaction, client, config) {
-    const guildConfig = getGuildConfig(interaction.guildId);
+    const guildConfig = getGuildConfig2(interaction.guildId);
     
     if (guildConfig.youtube.channelIds.length === 0) {
       return interaction.reply('📋 No YouTube channels are currently being monitored.');
@@ -68,20 +68,19 @@ module.exports = {
       });
     });
     
-    const options = channelDetails.slice(0, 25).map((channel, index) => 
-      new StringSelectMenuOptionBuilder()
-        .setLabel(channel.title.substring(0, 100))
-        .setDescription(`View details`)
-        .setValue(channel.channelId)
-        .setEmoji('📺')
-    );
+    const options = channelDetails.slice(0, 25).map((channel, index) => ({
+      label: channel.title.substring(0, 100),
+      description: 'View details',
+      value: channel.channelId,
+      emoji: '📺'
+    }));
     
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId('view-channel-details')
       .setPlaceholder('Select a channel for more details')
       .addOptions(options);
     
-    const row = new ActionRowBuilder().addComponents(selectMenu);
+    const row = new ActionRowBuilder2().addComponents(selectMenu);
     
     const response = await interaction.editReply({
       embeds: [embed],

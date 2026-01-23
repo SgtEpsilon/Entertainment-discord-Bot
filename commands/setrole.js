@@ -1,8 +1,8 @@
-const { SlashCommandBuilder } = require('discord.js');
-const { getGuildConfig, saveConfig } = require('../utils/config');
+const { SlashCommandBuilder: SlashCommandBuilder6 } = require('discord.js');
+const { getGuildConfig: getGuildConfig5, saveConfig: saveConfig4 } = require('../utils/config');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder6()
     .setName('setrole')
     .setDescription('Set or update the role to assign when streamers go live')
     .addRoleOption(option =>
@@ -13,7 +13,7 @@ module.exports = {
     ),
   
   async execute(interaction, client, config) {
-    const guildConfig = getGuildConfig(interaction.guildId);
+    const guildConfig = getGuildConfig5(interaction.guildId);
     const role = interaction.options.getRole('role');
     
     if (!role) {
@@ -24,7 +24,7 @@ module.exports = {
       const oldRoleId = guildConfig.liveRoleId;
       guildConfig.liveRoleId = null;
       
-      if (saveConfig()) {
+      if (saveConfig4()) {
         await interaction.reply(`✅ Live streamer role configuration removed!\n\n⚠️ Note: This does not remove the role from members who currently have it.`);
         console.log(`Guild ${interaction.guildId} removed live role ${oldRoleId}`);
       } else {
@@ -46,7 +46,7 @@ module.exports = {
     
     guildConfig.liveRoleId = role.id;
     
-    if (saveConfig()) {
+    if (saveConfig4()) {
       await interaction.reply(`✅ Live streamer role set to ${role}!\n\nStreamers will receive this role when they go live and lose it when they go offline.`);
       console.log(`Guild ${interaction.guildId} set live role to ${role.id}`);
     } else {

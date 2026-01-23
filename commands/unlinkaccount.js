@@ -1,5 +1,4 @@
-// commands/unlinkaccount.js
-const { SlashCommandBuilder, PermissionFlagsBits, StringSelectMenuBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
+const { SlashCommandBuilder, StringSelectMenuBuilder, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {
@@ -9,7 +8,6 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction, client, config) {
-    // Check if user is admin
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
       return await interaction.reply({
         content: '❌ This command is only available to administrators.',
@@ -19,20 +17,16 @@ module.exports = {
 
     const guildConfig = getGuildConfig(interaction.guild.id);
 
-    // Initialize guildConfig.twitch if it doesn't exist
     if (!guildConfig.twitch) {
       guildConfig.twitch = {};
     }
 
-    // Initialize linkedAccounts if it doesn't exist
     if (!guildConfig.twitch.linkedAccounts) {
       guildConfig.twitch.linkedAccounts = {};
     }
 
-    // Build options for dropdown
     const options = [];
 
-    // Add all linked accounts
     for (const [discordId, twitchUsername] of Object.entries(guildConfig.twitch.linkedAccounts)) {
       try {
         const user = await client.users.fetch(discordId);
@@ -43,7 +37,6 @@ module.exports = {
           emoji: '🔗'
         });
       } catch (error) {
-        // User not found
         options.push({
           label: `Unknown User`,
           description: `Twitch: ${twitchUsername}`,
@@ -53,7 +46,6 @@ module.exports = {
       }
     }
 
-    // Check if there are any options
     if (options.length === 0) {
       return await interaction.reply({
         content: '❌ No linked accounts to unlink.',
@@ -61,24 +53,23 @@ module.exports = {
       });
     }
 
-    // Create dropdown menu
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId('unlink_select')
       .setPlaceholder('Select an account to unlink')
-      .addOptions(options.slice(0, 25)); // Discord limit of 25 options
+      .addOptions(options.slice(0, 25));
 
     const row = new ActionRowBuilder().addComponents(selectMenu);
 
     const response = await interaction.reply({
       content: '🔓 Select which account to unlink:',
       components: [row],
-      ephemeral: true
+      ephemeral: true,
+      fetchReply: true
     });
 
-    // Collector for dropdown selection
     const collector = response.createMessageComponentCollector({
-      componentType: ComponentType.StringSelect,
-      time: 60000 // 60 seconds
+      componentType: 3, // StringSelect
+      time: 60000
     });
 
     collector.on('collect', async (i) => {
@@ -99,16 +90,12 @@ module.exports = {
         });
       }
 
-      // Get user info
       let userTag = 'Unknown User';
       try {
         const user = await client.users.fetch(selectedId);
         userTag = user.tag;
-      } catch (error) {
-        // User not found
-      }
+      } catch (error) {}
 
-      // Remove the link
       delete guildConfig.twitch.linkedAccounts[selectedId];
       saveConfig();
 
