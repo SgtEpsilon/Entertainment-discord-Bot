@@ -189,11 +189,12 @@ class TwitchMonitor {
               }
             } else if (lastNotification.stream_id !== currentStreamId) {
               // Different stream session (they went offline and came back online)
-              // Remove old role first, then send new notification and assign role
-              await this.removeLiveRole(guild, guildConfig, username, lastNotification.memberId);
-              
+              // Send new notification first, then only update role if successful
               const messageId = await this.sendNotification(stream, guildId, guildConfig);
               if (messageId) {
+                // Only remove old role and assign new one if notification was successful
+                await this.removeLiveRole(guild, guildConfig, username, lastNotification.memberId);
+                
                 liveMap.set(username, { 
                   game_id: currentGameId, 
                   memberId: null,
@@ -201,8 +202,11 @@ class TwitchMonitor {
                   channelId: guildConfig.channelId,
                   stream_id: currentStreamId
                 });
+                
                 await this.assignLiveRole(guild, guildConfig, username);
                 console.log(`🔄 New stream session detected for ${stream.user_name} (Stream ID: ${currentStreamId})`);
+              } else {
+                console.log(`⚠️ Failed to send notification for new stream session of ${stream.user_name}, will retry on next check`);
               }
             } else if (lastNotification.game_id !== currentGameId) {
               // Same stream session but game changed - update existing notification
