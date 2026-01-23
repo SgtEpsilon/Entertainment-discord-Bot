@@ -1,9 +1,10 @@
-const { SlashCommandBuilder: SlashCommandBuilder2 } = require('discord.js');
-const { getGuildConfig: getGuildConfig2, saveConfig: saveConfig2 } = require('../utils/config');
+// commands/addchannel.js
+const { SlashCommandBuilder } = require('discord.js');
+const { getGuildConfig, saveConfig } = require('../utils/config');
 const { extractYouTubeChannelId } = require('../utils/youtube');
 
 module.exports = {
-  data: new SlashCommandBuilder2()
+  data: new SlashCommandBuilder()
     .setName('addchannel')
     .setDescription('Add a YouTube channel to the monitoring list')
     .addStringOption(option =>
@@ -14,7 +15,7 @@ module.exports = {
     ),
   
   async execute(interaction, client, config) {
-    const guildConfig = getGuildConfig2(interaction.guildId);
+    const guildConfig = getGuildConfig(interaction.guildId);
     const input = interaction.options.getString('channel').trim();
     
     const channelId = await extractYouTubeChannelId(input);
@@ -29,7 +30,7 @@ module.exports = {
     
     guildConfig.youtube.channelIds.push(channelId);
     
-    if (saveConfig2()) {
+    if (saveConfig()) {
       await interaction.reply(`✅ Added YouTube channel to the monitoring list!\nChannel ID: \`${channelId}\`\n\nThe bot will check for new videos every 5 minutes.`);
       console.log(`Guild ${interaction.guildId} added ${channelId} to YouTube monitoring`);
     } else {
