@@ -1,16 +1,13 @@
-// commands/manuallink.js
-const { SlashCommandBuilder, UserSelectMenuBuilder, ActionRowBuilder, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('@discordjs/builders');
-const { Permissions } = require('discord.js');
+const { SlashCommandBuilder, UserSelectMenuBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
 const { getGuildConfig, saveConfig } = require('../utils/config');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('manuallink')
     .setDescription('Manually link a user\'s Discord account to their Twitch username (Admin only)')
-    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction, client, config) {
-    // Create user select menu
     const selectMenu = new UserSelectMenuBuilder()
       .setCustomId('user_select')
       .setPlaceholder('Select a user to link')
@@ -22,13 +19,13 @@ module.exports = {
     const response = await interaction.reply({
       content: '👥 Select the user you want to link to a Twitch account:',
       components: [row],
-      ephemeral: true
+      ephemeral: true,
+      fetchReply: true
     });
 
-    // Collector for user selection
     const collector = response.createMessageComponentCollector({
-      componentType: ComponentType.UserSelect,
-      time: 60000 // 60 seconds
+      componentType: 5, // UserSelect
+      time: 60000
     });
 
     collector.on('collect', async (i) => {
@@ -42,19 +39,16 @@ module.exports = {
       const selectedUser = i.users.first();
       const guildConfig = getGuildConfig(interaction.guild.id);
 
-      // Initialize guildConfig.twitch if it doesn't exist
       if (!guildConfig.twitch) {
         guildConfig.twitch = {};
       }
 
-      // Initialize linkedAccounts if it doesn't exist
       if (!guildConfig.twitch.linkedAccounts) {
         guildConfig.twitch.linkedAccounts = {};
       }
 
       const existingLink = guildConfig.twitch.linkedAccounts[selectedUser.id];
 
-      // Create modal for Twitch username input
       const modal = new ModalBuilder()
         .setCustomId(`twitch_modal_${selectedUser.id}`)
         .setTitle(`Link ${selectedUser.tag} to Twitch`);
@@ -67,7 +61,6 @@ module.exports = {
         .setRequired(true)
         .setMaxLength(25);
 
-      // Pre-fill with existing link if available
       if (existingLink) {
         twitchInput.setValue(existingLink);
       }
@@ -77,18 +70,16 @@ module.exports = {
 
       await i.showModal(modal);
 
-      // Wait for modal submission
       try {
         const modalSubmit = await i.awaitModalSubmit({
           filter: (submitInteraction) => 
             submitInteraction.customId === `twitch_modal_${selectedUser.id}` && 
             submitInteraction.user.id === interaction.user.id,
-          time: 120000 // 2 minutes
+          time: 120000
         });
 
         const twitchUsername = modalSubmit.fields.getTextInputValue('twitch_username').trim();
 
-        // Save the link
         guildConfig.twitch.linkedAccounts[selectedUser.id] = twitchUsername;
         saveConfig();
 
@@ -106,7 +97,6 @@ module.exports = {
 
         console.log(`🔗 Admin ${interaction.user.tag} linked ${selectedUser.tag} (${selectedUser.id}) to Twitch account: ${twitchUsername}`);
 
-        // Update original message
         await interaction.editReply({
           content: `✅ Link created for **${selectedUser.tag}**`,
           components: []
@@ -114,7 +104,6 @@ module.exports = {
 
         collector.stop();
       } catch (error) {
-        // Modal timeout or error
         console.error('Modal submission error:', error);
       }
     });

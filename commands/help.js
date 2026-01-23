@@ -1,13 +1,11 @@
-// commands/help.js
-const { EmbedBuilder, SlashCommandBuilder } = require('@discordjs/builders');
+const { EmbedBuilder, SlashCommandBuilder: SlashCommandBuilder6 } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder6()
     .setName('help')
     .setDescription('Show all available commands'),
   
   async execute(interaction, client, config) {
-    // Categorize commands
     const categories = {
       'Server Setup': [],
       'Account Linking': [],
@@ -16,7 +14,6 @@ module.exports = {
       'Utility': []
     };
 
-    // Command categorization mapping
     const commandCategories = {
       'setup': 'Server Setup',
       'setrole': 'Server Setup',
@@ -36,7 +33,6 @@ module.exports = {
       'help': 'Utility'
     };
 
-    // Icons for each category
     const categoryIcons = {
       'Server Setup': '⚙️',
       'Account Linking': '🔗',
@@ -45,7 +41,6 @@ module.exports = {
       'Utility': '🛠️'
     };
 
-    // Dynamically load all commands
     client.commands.forEach((command) => {
       const commandName = command.data.name;
       const commandDesc = command.data.description || 'No description';
@@ -59,7 +54,6 @@ module.exports = {
       .setTitle('🤖 Discord Streaming Bot - Help Menu')
       .setDescription('Monitor Twitch streams and YouTube uploads with automatic notifications!');
 
-    // Add fields for each category that has commands
     for (const [categoryName, commands] of Object.entries(categories)) {
       if (commands.length > 0) {
         const icon = categoryIcons[categoryName] || '📌';
@@ -71,7 +65,6 @@ module.exports = {
       }
     }
 
-    // Add additional info fields
     embed.addFields(
       {
         name: '💡 How It Works',
@@ -79,7 +72,7 @@ module.exports = {
         inline: false
       },
       {
-        name: '📝 Quick Start',
+        name: '🚀 Quick Start',
         value: '```\n1. /setup channel:#notifications liverole:@Live\n2. /linkaccount (enter your Twitch username)\n3. /addstreamer username:shroud\n4. Start streaming → Auto role!\n```',
         inline: false
       },

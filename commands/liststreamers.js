@@ -1,21 +1,19 @@
-const { getGuildConfig } = require('../utils/config');
-const { StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, EmbedBuilder } = require('@discordjs/builders');
+const { SlashCommandBuilder: SlashCommandBuilder4, StringSelectMenuBuilder: StringSelectMenuBuilder2, ActionRowBuilder: ActionRowBuilder3, EmbedBuilder: EmbedBuilder3 } = require('discord.js');
+const { getGuildConfig: getGuildConfig4 } = require('../utils/config');
 
 module.exports = {
-  data: {
-    name: 'liststreamers',
-    description: 'Show all monitored Twitch streamers'
-  },
+  data: new SlashCommandBuilder4()
+    .setName('liststreamers')
+    .setDescription('Show all monitored Twitch streamers'),
   
   async execute(interaction, client, config) {
-    const guildConfig = getGuildConfig(interaction.guildId);
+    const guildConfig = getGuildConfig4(interaction.guildId);
     
     if (guildConfig.twitch.usernames.length === 0) {
       return interaction.reply('📋 No streamers are currently being monitored.');
     }
     
-    // Create embed
-    const embed = new EmbedBuilder()
+    const embed = new EmbedBuilder3()
       .setColor('#9146FF')
       .setTitle('📋 Monitored Twitch Streamers')
       .setDescription(`Total: ${guildConfig.twitch.usernames.length} streamer(s)`)
@@ -32,22 +30,22 @@ module.exports = {
       inline: false
     });
     
-    // Create dropdown
     const options = guildConfig.twitch.usernames.slice(0, 25).map(username => {
       const hasCustomMessage = guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username];
-      return new StringSelectMenuOptionBuilder()
-        .setLabel(username)
-        .setDescription(hasCustomMessage ? 'Has custom notification' : 'Using default notification')
-        .setValue(username)
-        .setEmoji('🎮');
+      return {
+        label: username,
+        description: hasCustomMessage ? 'Has custom notification' : 'Using default notification',
+        value: username,
+        emoji: '🎮'
+      };
     });
     
-    const selectMenu = new StringSelectMenuBuilder()
+    const selectMenu = new StringSelectMenuBuilder2()
       .setCustomId('view-streamer-details')
       .setPlaceholder('Select a streamer for more details')
       .addOptions(options);
     
-    const row = new ActionRowBuilder().addComponents(selectMenu);
+    const row = new ActionRowBuilder3().addComponents(selectMenu);
     
     const response = await interaction.reply({
       embeds: [embed],
@@ -55,7 +53,6 @@ module.exports = {
       fetchReply: true
     });
     
-    // Handle streamer selection
     try {
       const collector = response.createMessageComponentCollector({
         filter: i => i.user.id === interaction.user.id,
@@ -66,7 +63,7 @@ module.exports = {
         const username = i.values[0];
         const hasCustomMessage = guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username];
         
-        const detailEmbed = new EmbedBuilder()
+        const detailEmbed = new EmbedBuilder3()
           .setColor('#9146FF')
           .setTitle(`Streamer: ${username}`)
           .setURL(`https://twitch.tv/${username}`)

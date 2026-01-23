@@ -1,20 +1,19 @@
-const { SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder } = require('@discordjs/builders');
-const { Permissions } = require('discord.js');
-const { getGuildConfig, saveConfig } = require('../utils/config');
-const axios = require('axios');
-const { parseString } = require('xml2js');
-const util = require('util');
+const { SlashCommandBuilder: SlashCommandBuilder3, StringSelectMenuBuilder: StringSelectMenuBuilder2, ActionRowBuilder: ActionRowBuilder2, PermissionFlagsBits: PermissionFlagsBits2 } = require('discord.js');
+const { getGuildConfig: getGuildConfig2, saveConfig } = require('../utils/config');
+const axios2 = require('axios');
+const { parseString: parseString2 } = require('xml2js');
+const util2 = require('util');
 
-const parseXML = util.promisify(parseString);
+const parseXML2 = util2.promisify(parseString2);
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder3()
     .setName('removechannel')
     .setDescription('Remove a YouTube channel from the monitoring list')
-    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
+    .setDefaultMemberPermissions(PermissionFlagsBits2.Administrator),
   
   async execute(interaction, client, config) {
-    const guildConfig = getGuildConfig(interaction.guildId);
+    const guildConfig = getGuildConfig2(interaction.guildId);
     
     if (guildConfig.youtube.channelIds.length === 0) {
       return interaction.reply('📋 No YouTube channels are currently being monitored.');
@@ -27,37 +26,35 @@ module.exports = {
     for (const channelId of guildConfig.youtube.channelIds) {
       try {
         const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-        const response = await axios.get(rssUrl, { timeout: 5000 });
-        const result = await parseXML(response.data);
+        const response = await axios2.get(rssUrl, { timeout: 5000 });
+        const result = await parseXML2(response.data);
         
         let channelTitle = 'Unknown Channel';
         if (result.feed && result.feed.author && result.feed.author[0]) {
           channelTitle = result.feed.author[0].name[0];
         }
         
-        channelOptions.push(
-          new StringSelectMenuOptionBuilder()
-            .setLabel(channelTitle)
-            .setDescription(channelId)
-            .setValue(channelId)
-        );
+        channelOptions.push({
+          label: channelTitle,
+          description: channelId,
+          value: channelId
+        });
       } catch (error) {
         console.error(`Error fetching channel info for ${channelId}:`, error.message);
-        channelOptions.push(
-          new StringSelectMenuOptionBuilder()
-            .setLabel('Unknown Channel')
-            .setDescription(channelId)
-            .setValue(channelId)
-        );
+        channelOptions.push({
+          label: 'Unknown Channel',
+          description: channelId,
+          value: channelId
+        });
       }
     }
     
-    const selectMenu = new StringSelectMenuBuilder()
+    const selectMenu = new StringSelectMenuBuilder2()
       .setCustomId('remove-channel-select')
       .setPlaceholder('Select a channel to remove')
       .addOptions(channelOptions);
     
-    const row = new ActionRowBuilder().addComponents(selectMenu);
+    const row = new ActionRowBuilder2().addComponents(selectMenu);
     
     const response = await interaction.editReply({
       content: '🗑️ **Select a YouTube channel to remove:**',

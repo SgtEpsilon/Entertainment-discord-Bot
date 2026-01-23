@@ -1,14 +1,15 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const { getGuildConfig, saveConfig } = require('../utils/config');
+const { SlashCommandBuilder: SlashCommandBuilder7, ChannelType } = require('discord.js');
+const { getGuildConfig: getGuildConfig6, saveConfig: saveConfig5 } = require('../utils/config');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder7()
     .setName('setup')
     .setDescription('Set the notification channel and optional live role for this server')
     .addChannelOption(option =>
       option
         .setName('channel')
         .setDescription('The channel to send notifications to')
+        .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)
     )
     .addRoleOption(option =>
@@ -19,13 +20,9 @@ module.exports = {
     ),
   
   async execute(interaction, client, config) {
-    const guildConfig = getGuildConfig(interaction.guildId);
+    const guildConfig = getGuildConfig6(interaction.guildId);
     const channel = interaction.options.getChannel('channel');
     const role = interaction.options.getRole('liverole');
-    
-    if (!channel.isText()) {
-      return interaction.reply('❌ Please select a text channel!');
-    }
     
     guildConfig.channelId = channel.id;
     let responseMessage = `✅ Notification channel set to ${channel}!`;
@@ -47,7 +44,7 @@ module.exports = {
       console.log(`Guild ${interaction.guildId} set live role to ${role.id}`);
     }
     
-    if (saveConfig()) {
+    if (saveConfig5()) {
       await interaction.reply(responseMessage);
       console.log(`Guild ${interaction.guildId} set channel to ${channel.id}`);
     } else {

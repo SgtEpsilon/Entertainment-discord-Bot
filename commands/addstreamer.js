@@ -1,9 +1,9 @@
-const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('@discordjs/builders');
-const { getGuildConfig, saveConfig } = require('../utils/config');
+const { SlashCommandBuilder: SlashCommandBuilder3, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder: ActionRowBuilder2 } = require('discord.js');
+const { getGuildConfig: getGuildConfig3, saveConfig: saveConfig3 } = require('../utils/config');
 const axios = require('axios');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder3()
     .setName('addstreamer')
     .setDescription('Add a Twitch streamer to the monitoring list with optional custom notification'),
   
@@ -29,8 +29,8 @@ module.exports = {
       .setRequired(false)
       .setMaxLength(500);
 
-    const usernameRow = new ActionRowBuilder().addComponents(usernameInput);
-    const messageRow = new ActionRowBuilder().addComponents(messageInput);
+    const usernameRow = new ActionRowBuilder2().addComponents(usernameInput);
+    const messageRow = new ActionRowBuilder2().addComponents(messageInput);
     modal.addComponents(usernameRow, messageRow);
 
     await interaction.showModal(modal);
@@ -50,7 +50,7 @@ module.exports = {
         return submitted.editReply('❌ Invalid Twitch username format. Usernames must be 4-25 characters long and can only contain letters, numbers, and underscores.');
       }
 
-      const guildConfig = getGuildConfig(interaction.guildId);
+      const guildConfig = getGuildConfig3(interaction.guildId);
 
       if (guildConfig.twitch.usernames.includes(username)) {
         return submitted.editReply(`❌ **${username}** is already being monitored!`);
@@ -75,7 +75,7 @@ module.exports = {
         guildConfig.twitch.customMessages[username] = customMessage;
       }
 
-      if (saveConfig()) {
+      if (saveConfig3()) {
         let reply = `✅ Added **${username}** to the monitoring list!\n\nThe bot will check if they go live every minute.`;
         
         if (customMessage) {

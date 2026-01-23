@@ -1,15 +1,13 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const { Permissions } = require('discord.js');
+const { SlashCommandBuilder: SlashCommandBuilder4, PermissionFlagsBits: PermissionFlagsBits2 } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder4()
     .setName('clearstatus')
     .setDescription('Clear custom status and resume rotation')
-    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
+    .setDefaultMemberPermissions(PermissionFlagsBits2.Administrator),
 
   async execute(interaction, client) {
-    // Double-check permissions (redundant but safe)
-    if (!interaction.memberPermissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
+    if (!interaction.memberPermissions.has(PermissionFlagsBits2.Administrator)) {
       return await interaction.reply({
         content: '❌ You need Administrator permission to use this command.',
         ephemeral: true

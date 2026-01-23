@@ -1,18 +1,15 @@
-// commands/reloadstatus.js
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const { Permissions } = require('discord.js');
+const { SlashCommandBuilder: SlashCommandBuilder2, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
 module.exports = {
-  data: new SlashCommandBuilder()
+  data: new SlashCommandBuilder2()
     .setName('reloadstatus')
     .setDescription('Reload status messages from status.json without restarting the bot')
-    .setDefaultMemberPermissions(Permissions.FLAGS.ADMINISTRATOR),
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction, client) {
-    // Double-check permissions (redundant but safe)
-    if (!interaction.memberPermissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
+    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
       return await interaction.reply({
         content: '❌ You need Administrator permission to use this command.',
         ephemeral: true
@@ -20,7 +17,6 @@ module.exports = {
     }
 
     try {
-      // Check if status.json exists
       const statusPath = path.join(__dirname, '..', 'status.json');
       
       if (!fs.existsSync(statusPath)) {
@@ -30,11 +26,9 @@ module.exports = {
         });
       }
 
-      // Read and parse status.json
       const statusData = fs.readFileSync(statusPath, 'utf8');
       const newStatuses = JSON.parse(statusData);
 
-      // Validate the data
       if (!Array.isArray(newStatuses) || newStatuses.length === 0) {
         return await interaction.reply({
           content: '❌ Invalid status.json format! Must be a non-empty array of status objects.',
@@ -42,7 +36,6 @@ module.exports = {
         });
       }
 
-      // Validate each status object
       for (const status of newStatuses) {
         if (!status.type || !status.text) {
           return await interaction.reply({
@@ -59,7 +52,6 @@ module.exports = {
           });
         }
 
-        // Check if STREAMING type has URL
         if (status.type === 'STREAMING' && !status.url) {
           return await interaction.reply({
             content: '❌ STREAMING status type requires a "url" property!',
@@ -68,7 +60,6 @@ module.exports = {
         }
       }
 
-      // Update the bot's status array
       if (typeof client.reloadStatuses === 'function') {
         client.reloadStatuses(newStatuses);
         
