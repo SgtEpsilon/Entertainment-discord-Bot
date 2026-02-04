@@ -13,10 +13,14 @@ const client = new Discord.Client({
   intents: Discord.GatewayIntentBits ? [
     Discord.GatewayIntentBits.Guilds,
     Discord.GatewayIntentBits.GuildMessages,
-    Discord.GatewayIntentBits.MessageContent
+    Discord.GatewayIntentBits.MessageContent,
+    Discord.GatewayIntentBits.GuildMembers,
+    Discord.GatewayIntentBits.GuildPresences
   ] : [
     Discord.Intents.FLAGS.GUILDS,
-    Discord.Intents.FLAGS.GUILD_MESSAGES
+    Discord.Intents.FLAGS.GUILD_MESSAGES,
+    Discord.Intents.FLAGS.GUILD_MEMBERS,
+    Discord.Intents.FLAGS.GUILD_PRESENCES
   ]
 });
 
@@ -205,6 +209,80 @@ client.on('interactionCreate', async (interaction) => {
     } else {
       await interaction.reply({ content: errorMessage, ephemeral: true });
     }
+  }
+});
+
+// Handle presence updates for automatic role assignment
+client.on('presenceUpdate', async (oldPresence, newPresence) => {
+  try {
+    // Skip if no guild (DM) or no new presence
+    if (!newPresence || !newPresence.guild) return;
+
+    const guildId = newPresence.guild.id;
+    const guildConfig = getGuildConfig(guildId);
+
+    // Skip if no live role configured
+    if (!guildConfig.liveRoleId) return;
+
+    // Skip if no linked accounts configured
+    if (!guildConfig.twitch || !guildConfig.twitch.linkedAccounts) return;
+
+    const userId = newPresence.userId;
+    const twitchUsername = guildConfig.twitch.linkedAccounts[userId];
+
+    // Skip if user hasn't linked their Twitch account
+    if (!twitchUsername) return;
+
+    const member = newPresence.member;
+    if (!member) return;
+
+    const role = await newPresence.guild.roles.fetch(guildConfig.liveRoleId);
+    if (!role) {
+      console.log(`Live role ${guildConfig.liveRoleId} not found in guild ${guildId}`);
+      return;
+    }
+
+    // Check if user is now streaming
+    const isStreaming = newPresence.activities.some(activity => {
+      // Use ActivityType enum for v14+, string for v13
+      const streamingType = Discord.ActivityType ? Discord.ActivityType.Streaming : 'STREAMING';
+      
+      // Check if activity is streaming and it's on Twitch
+      if (activity.type === streamingType) {
+        // Check if the streaming URL contains twitch.tv or if the platform is Twitch
+        const url = activity.url?.toLowerCase() || '';
+        const name = activity.name?.toLowerCase() || '';
+        return url.includes('twitch.tv') || name === 'twitch';
+      }
+      return false;
+    });
+
+    const wasStreaming = oldPresence?.activities.some(activity => {
+      const streamingType = Discord.ActivityType ? Discord.ActivityType.Streaming : 'STREAMING';
+      if (activity.type === streamingType) {
+        const url = activity.url?.toLowerCase() || '';
+        const name = activity.name?.toLowerCase() || '';
+        return url.includes('twitch.tv') || name === 'twitch';
+      }
+      return false;
+    }) || false;
+
+    // User started streaming on Twitch
+    if (isStreaming && !wasStreaming) {
+      if (!member.roles.cache.has(role.id)) {
+        await member.roles.add(role);
+        console.log(`✅ Auto-assigned live role to ${member.user.tag} (linked: ${twitchUsername}) - started streaming`);
+      }
+    }
+    // User stopped streaming on Twitch
+    else if (!isStreaming && wasStreaming) {
+      if (member.roles.cache.has(role.id)) {
+        await member.roles.remove(role);
+        console.log(`❌ Auto-removed live role from ${member.user.tag} (linked: ${twitchUsername}) - stopped streaming`);
+      }
+    }
+  } catch (error) {
+    console.error('Error handling presence update:', error);
   }
 });
 
