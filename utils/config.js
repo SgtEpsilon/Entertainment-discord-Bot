@@ -17,6 +17,12 @@ function getGuildConfig(guildId) {
         channelIds: [],
         checkInterval: 300000,
         message: "📺 {channel} just uploaded a new video!\n**{title}**"
+      },
+      tiktok: {
+        usernames: [],
+        checkInterval: 300000,
+        message: "🎵 {username} just posted on TikTok!\n**{description}**",
+        customMessages: {}
       }
     };
     saveConfig();
