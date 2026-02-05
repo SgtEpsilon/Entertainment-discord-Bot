@@ -6,7 +6,6 @@ const path = require('path');
 const config = require('./config.json');
 const TwitchMonitor = require('./modules/twitch');
 const YouTubeMonitor = require('./modules/youtube');
-const TikTokMonitor = require('./modules/tiktok');
 const { getGuildConfig, saveConfig, deleteGuildConfig } = require('./utils/config');
 
 // Support both discord.js v13 and v14+
@@ -37,7 +36,6 @@ try {
     { type: 'WATCHING', text: 'for new streams' },
     { type: 'WATCHING', text: 'Twitch streamers' },
     { type: 'WATCHING', text: 'YouTube uploads' },
-    { type: 'WATCHING', text: 'TikTok posts' },
     { type: 'PLAYING', text: 'with notifications' },
     { type: 'LISTENING', text: 'to stream alerts' },
     { type: 'STREAMING', text: 'live updates', url: 'https://twitch.tv' }
@@ -149,7 +147,7 @@ for (const file of commandFiles) {
 
 let twitchMonitor;
 let youtubeMonitor;
-let tiktokMonitor;
+
 
 // Use clientReady for v14.16+, fallback to ready for older versions
 const readyEvent = client.events?.ready ? 'clientReady' : 'ready';
@@ -177,14 +175,12 @@ client.once(readyEvent, async () => {
   // Initialize monitors
   twitchMonitor = new TwitchMonitor(client, config);
   youtubeMonitor = new YouTubeMonitor(client, config);
-  tiktokMonitor = new TikTokMonitor(client, config);
   
   // Start monitoring
   twitchMonitor.start();
   youtubeMonitor.start();
-  tiktokMonitor.start();
   
-  console.log('Bot is now monitoring Twitch, YouTube, and TikTok!');
+  console.log('Bot is now monitoring Twitch, YouTube');
   console.log(`Configured for ${Object.keys(config.guilds).length} guild(s)`);
 });
 
@@ -203,7 +199,6 @@ client.on('interactionCreate', async (interaction) => {
     await command.execute(interaction, client, config, {
       twitchMonitor,
       youtubeMonitor,
-      tiktokMonitor
     });
   } catch (error) {
     console.error(`Error executing ${interaction.commandName}:`, error);
