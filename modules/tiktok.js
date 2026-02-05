@@ -15,72 +15,238 @@ class TikTokMonitor {
    * Uses TikTok's web interface to get post data
    */
   async fetchUserPosts(username) {
+    // Try web scraping first
+    const webResult = await this.fetchUserPostsViaWeb(username);
+    if (webResult) {
+      return webResult;
+    }
+    
+    // Fallback to API method
+    console.log(`[TikTok] Web scraping failed for @${username}, trying API method...`);
+    return await this.fetchUserPostsViaAPI(username);
+  }
+
+  /**
+   * Fetch posts via web scraping (primary method)
+   */
+  async fetchUserPostsViaWeb(username) {
     try {
       // TikTok profile URL
       const url = `https://www.tiktok.com/@${username}`;
       
+      console.log(`[TikTok] Fetching posts for @${username} via web...`);
+      
       // Make request with browser-like headers
       const response = await axios.get(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
           'Accept-Encoding': 'gzip, deflate, br',
           'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Cache-Control': 'max-age=0'
         },
-        timeout: 10000
+        timeout: 15000,
+        maxRedirects: 5
       });
 
-      // Extract JSON data from the page
-      // TikTok embeds data in <script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"> tag
-      const scriptMatch = response.data.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">(.*?)<\/script>/s);
+      // Try multiple extraction methods
+      let jsonData = null;
       
-      if (!scriptMatch) {
-        console.log(`No data found for TikTok user: @${username}`);
+      // Method 1: __UNIVERSAL_DATA_FOR_REHYDRATION__
+      let scriptMatch = response.data.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">(.*?)<\/script>/s);
+      if (scriptMatch) {
+        console.log(`[TikTok] Found UNIVERSAL_DATA for @${username}`);
+        try {
+          jsonData = JSON.parse(scriptMatch[1]);
+        } catch (e) {
+          console.log(`[TikTok] Failed to parse UNIVERSAL_DATA: ${e.message}`);
+        }
+      }
+      
+      // Method 2: SIGI_STATE
+      if (!jsonData) {
+        scriptMatch = response.data.match(/<script id="SIGI_STATE" type="application\/json">(.*?)<\/script>/s);
+        if (scriptMatch) {
+          console.log(`[TikTok] Found SIGI_STATE for @${username}`);
+          try {
+            jsonData = JSON.parse(scriptMatch[1]);
+          } catch (e) {
+            console.log(`[TikTok] Failed to parse SIGI_STATE: ${e.message}`);
+          }
+        }
+      }
+      
+      // Method 3: __NEXT_DATA__
+      if (!jsonData) {
+        scriptMatch = response.data.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s);
+        if (scriptMatch) {
+          console.log(`[TikTok] Found NEXT_DATA for @${username}`);
+          try {
+            jsonData = JSON.parse(scriptMatch[1]);
+          } catch (e) {
+            console.log(`[TikTok] Failed to parse NEXT_DATA: ${e.message}`);
+          }
+        }
+      }
+      
+      if (!jsonData) {
+        console.log(`[TikTok] ⚠️ No JSON data found for @${username}`);
         return null;
       }
 
-      const jsonData = JSON.parse(scriptMatch[1]);
+      // Try to extract user and post data from various possible structures
+      let userData = null;
+      let posts = [];
       
-      // Navigate to user data
-      const userData = jsonData?.__DEFAULT_SCOPE__?.["webapp.user-detail"];
+      // Try different data paths
+      const possiblePaths = [
+        () => jsonData?.__DEFAULT_SCOPE__?.["webapp.user-detail"],
+        () => jsonData?.UserModule?.users?.[username],
+        () => jsonData?.props?.pageProps?.userInfo,
+        () => jsonData?.ItemModule,
+      ];
       
-      if (!userData || !userData.userInfo) {
-        console.log(`User data not found for: @${username}`);
+      for (const pathFn of possiblePaths) {
+        try {
+          const data = pathFn();
+          if (data) {
+            userData = data;
+            console.log(`[TikTok] Found user data for @${username}`);
+            break;
+          }
+        } catch (e) {
+          // Continue to next path
+        }
+      }
+      
+      if (!userData) {
+        console.log(`[TikTok] ⚠️ User data structure not found for @${username}`);
         return null;
       }
 
-      const userInfo = userData.userInfo;
-      const posts = userData.itemList || [];
+      // Extract posts from various possible structures
+      const postsPaths = [
+        () => userData.itemList,
+        () => userData.items,
+        () => Object.values(jsonData?.ItemModule || {}),
+        () => jsonData?.props?.pageProps?.items,
+      ];
+      
+      for (const pathFn of postsPaths) {
+        try {
+          const p = pathFn();
+          if (p && Array.isArray(p) && p.length > 0) {
+            posts = p;
+            console.log(`[TikTok] Found ${posts.length} posts for @${username}`);
+            break;
+          }
+        } catch (e) {
+          // Continue to next path
+        }
+      }
 
       if (posts.length === 0) {
-        console.log(`No posts found for: @${username}`);
+        console.log(`[TikTok] No posts found in data for @${username}`);
         return null;
       }
 
       // Get the most recent post
       const latestPost = posts[0];
       
+      // Extract user info
+      const userInfo = userData.userInfo || userData.user || userData;
+      
       return {
-        id: latestPost.id,
-        desc: latestPost.desc || 'No description',
-        createTime: latestPost.createTime,
-        stats: latestPost.stats,
-        video: latestPost.video,
+        id: latestPost.id || latestPost.itemId || latestPost.video?.id,
+        desc: latestPost.desc || latestPost.description || latestPost.title || 'No description',
+        createTime: latestPost.createTime || latestPost.createTimeISO || Date.now(),
+        stats: latestPost.stats || {},
+        video: latestPost.video || {},
         author: {
-          uniqueId: userInfo.user.uniqueId,
-          nickname: userInfo.user.nickname,
-          avatarThumb: userInfo.user.avatarThumb
+          uniqueId: userInfo.uniqueId || userInfo.user?.uniqueId || username,
+          nickname: userInfo.nickname || userInfo.user?.nickname || username,
+          avatarThumb: userInfo.avatarThumb || userInfo.user?.avatarThumb || ''
         }
       };
       
     } catch (error) {
       if (error.response?.status === 404) {
-        console.error(`TikTok user not found: @${username}`);
+        console.error(`[TikTok] ❌ User not found: @${username}`);
+      } else if (error.code === 'ECONNABORTED') {
+        console.error(`[TikTok] ⏱️ Timeout fetching @${username}`);
       } else {
-        console.error(`Error fetching TikTok posts for @${username}:`, error.message);
+        console.error(`[TikTok] ❌ Error in web scraping for @${username}:`, error.message);
       }
+      return null;
+    }
+  }
+
+  /**
+   * Fetch posts via unofficial API (fallback method)
+   */
+  async fetchUserPostsViaAPI(username) {
+    try {
+      console.log(`[TikTok] Trying API method for @${username}...`);
+      
+      // Try TikTok's mobile API endpoint
+      const apiUrl = `https://www.tiktok.com/api/user/detail/?uniqueId=${username}`;
+      
+      const response = await axios.get(apiUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+          'Accept': 'application/json',
+          'Referer': `https://www.tiktok.com/@${username}`
+        },
+        timeout: 10000
+      });
+
+      if (!response.data || !response.data.userInfo) {
+        console.log(`[TikTok] No user info from API for @${username}`);
+        return null;
+      }
+
+      const userInfo = response.data.userInfo.user;
+      
+      // Fetch user's videos
+      const videosUrl = `https://www.tiktok.com/api/post/item_list/?secUid=${response.data.userInfo.user.secUid}&count=10`;
+      const videosResponse = await axios.get(videosUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+          'Accept': 'application/json',
+          'Referer': `https://www.tiktok.com/@${username}`
+        },
+        timeout: 10000
+      });
+
+      if (!videosResponse.data?.itemList || videosResponse.data.itemList.length === 0) {
+        console.log(`[TikTok] No posts from API for @${username}`);
+        return null;
+      }
+
+      const latestPost = videosResponse.data.itemList[0];
+      
+      console.log(`[TikTok] ✅ Got post from API for @${username}`);
+      
+      return {
+        id: latestPost.id,
+        desc: latestPost.desc || 'No description',
+        createTime: latestPost.createTime,
+        stats: latestPost.stats || {},
+        video: latestPost.video || {},
+        author: {
+          uniqueId: userInfo.uniqueId,
+          nickname: userInfo.nickname,
+          avatarThumb: userInfo.avatarThumb
+        }
+      };
+      
+    } catch (error) {
+      console.error(`[TikTok] ❌ API method also failed for @${username}:`, error.message);
       return null;
     }
   }
