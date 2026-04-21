@@ -1,13 +1,15 @@
-const { EmbedBuilder, SlashCommandBuilder: SlashCommandBuilder6 } = require('discord.js');
+// commands/help.js
+const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder6()
+  data: new SlashCommandBuilder()
     .setName('help')
     .setDescription('Show all available commands'),
-  
+
   async execute(interaction, client, config) {
     const categories = {
       'Server Setup': [],
+      'Bot Management': [],
       'Account Linking': [],
       'Twitch Monitoring': [],
       'YouTube Monitoring': [],
@@ -18,6 +20,9 @@ module.exports = {
       'setup': 'Server Setup',
       'setrole': 'Server Setup',
       'removerole': 'Server Setup',
+      'customstatus': 'Bot Management',
+      'clearstatus': 'Bot Management',
+      'reloadstatus': 'Bot Management',
       'linkaccount': 'Account Linking',
       'unlinkaccount': 'Account Linking',
       'manuallink': 'Account Linking',
@@ -35,8 +40,9 @@ module.exports = {
 
     const categoryIcons = {
       'Server Setup': '⚙️',
+      'Bot Management': '🎮',
       'Account Linking': '🔗',
-      'Twitch Monitoring': '🎮',
+      'Twitch Monitoring': '🟣',
       'YouTube Monitoring': '📺',
       'Utility': '🛠️'
     };
@@ -45,7 +51,6 @@ module.exports = {
       const commandName = command.data.name;
       const commandDesc = command.data.description || 'No description';
       const category = commandCategories[commandName] || 'Utility';
-      
       categories[category].push(`\`/${commandName}\` - ${commandDesc}`);
     });
 
@@ -68,12 +73,45 @@ module.exports = {
     embed.addFields(
       {
         name: '💡 How It Works',
-        value: '**Automatic Monitoring:**\n• Twitch streams checked every 60 seconds\n• YouTube uploads checked every 5 minutes\n• Notifications sent to your configured channel\n\n**Live Role System:**\n• Link your Twitch account with `/linkaccount`\n• Stream on Twitch → Get live role automatically\n• Stop streaming → Role removed automatically',
+        value: [
+          '**Automatic Monitoring:**',
+          '• Twitch streams checked every 60 seconds',
+          '• YouTube uploads checked every 5 minutes',
+          '• Notifications sent to your configured channel(s)',
+          '',
+          '**Live Role System:**',
+          '• Link your Twitch account with `/linkaccount`',
+          '• Stream on Twitch → Get live role automatically',
+          '• Stop streaming → Role removed automatically'
+        ].join('\n'),
         inline: false
       },
       {
         name: '🚀 Quick Start',
-        value: '```\n1. /setup channel:#notifications liverole:@Live\n2. /linkaccount (enter your Twitch username)\n3. /addstreamer username:shroud\n4. Start streaming → Auto role!\n```',
+        value: [
+          '```',
+          '# Separate channels per platform:',
+          '/setup twitchchannel:#twitch-live youtubechannel:#yt-uploads liverole:@Live',
+          '',
+          '# Or a single fallback channel:',
+          '/setup channel:#notifications liverole:@Live',
+          '',
+          '/linkaccount          → enter your Twitch username',
+          '/addstreamer          → add a Twitch streamer',
+          '/addchannel channel:@MrBeast',
+          '```'
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: '📡 Channel Routing',
+        value: [
+          '• **`twitchchannel`** — dedicated channel for Twitch go-live notifications',
+          '• **`youtubechannel`** — dedicated channel for YouTube upload notifications',
+          '• **`channel`** — shared fallback used when no platform channel is set',
+          '',
+          'You can mix and match — e.g. set a Twitch-specific channel and leave YouTube to the fallback.'
+        ].join('\n'),
         inline: false
       },
       {

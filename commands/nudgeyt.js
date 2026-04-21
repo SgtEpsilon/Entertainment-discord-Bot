@@ -1,48 +1,25 @@
+// commands/nudgeyt.js
 const { SlashCommandBuilder, StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
-const { getGuildConfig } = require('../utils/config');
-const axios = require('axios');
-const { parseString } = require('xml2js');
-const util = require('util');
-
-const parseXML = util.promisify(parseString);
+const { getGuildConfig, resolveYouTubeChannel } = require('../utils/config');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('nudgeyt')
     .setDescription('Check and post latest YouTube videos'),
-  
+
   async execute(interaction, client, config, monitors) {
     const guildConfig = getGuildConfig(interaction.guildId);
-    
+
     await interaction.deferReply();
-    
-    if (!guildConfig.channelId) {
-      return interaction.editReply('❌ Please set up a notification channel first using `/setup`!');
-    }
-    
+
     if (guildConfig.youtube.channelIds.length === 0) {
       return interaction.editReply('❌ No YouTube channels configured to check!');
     }
 
     const latestVideos = await monitors.youtubeMonitor.checkSpecificChannels(guildConfig.youtube.channelIds);
-    
+
     if (latestVideos.length === 0) {
       return interaction.editReply('🔴 No recent videos found for monitored channels.');
-    }
-
-    const channelNames = {};
-    for (const channelId of guildConfig.youtube.channelIds) {
-      try {
-        const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-        const response = await axios.get(rssUrl, { timeout: 5000 });
-        const result = await parseXML(response.data);
-        
-        if (result.feed && result.feed.author && result.feed.author[0]) {
-          channelNames[channelId] = result.feed.author[0].name[0];
-        }
-      } catch (error) {
-        console.error(`Error fetching channel name for ${channelId}:`, error.message);
-      }
     }
 
     const embed = new EmbedBuilder()
@@ -51,31 +28,30 @@ module.exports = {
       .setDescription(`Found ${latestVideos.length} recent video(s) from monitored channels`)
       .setTimestamp();
 
+    // Map videos back to their YT channel ID so we can resolve notif channels
+    const videoChannelMap = {};
+    for (let i = 0; i < latestVideos.length; i++) {
+      videoChannelMap[i] = guildConfig.youtube.channelIds[i];
+    }
+
     latestVideos.forEach((video, index) => {
-      const channelTitle = video.snippet.channelTitle;
-      const videoTitle = video.snippet.title;
-      const videoUrl = `https://www.youtube.com/watch?v=${video.id.videoId}`;
-      
+      const ytChannelId = videoChannelMap[index];
+      const notifChannelId = resolveYouTubeChannel(guildConfig, ytChannelId);
+      const channelStr = notifChannelId ? `<#${notifChannelId}>` : '⚠️ No channel';
       embed.addFields({
-        name: `${index + 1}. ${channelTitle}`,
-        value: `[${videoTitle}](${videoUrl})`,
+        name: `${index + 1}. ${video.snippet.channelTitle}`,
+        value: `[${video.snippet.title}](https://www.youtube.com/watch?v=${video.id.videoId})\n📢 → ${channelStr}`,
         inline: false
       });
     });
 
     const options = [
-      {
-        label: '✅ Post All Videos',
-        description: `Post all ${latestVideos.length} video(s) to the notification channel`,
-        value: 'post-all',
-        emoji: '📤'
-      }
+      { label: '✅ Post All Videos', description: `Post all ${latestVideos.length} video(s) to their configured channels`, value: 'post-all', emoji: '📤' }
     ];
-
     latestVideos.slice(0, 24).forEach((video, index) => {
       options.push({
-        label: `${video.snippet.channelTitle}`.substring(0, 100),
-        description: `${video.snippet.title}`.substring(0, 100),
+        label: video.snippet.channelTitle.substring(0, 100),
+        description: video.snippet.title.substring(0, 100),
         value: `video-${index}`,
         emoji: '🎬'
       });
@@ -86,12 +62,7 @@ module.exports = {
       .setPlaceholder('Choose which videos to post')
       .addOptions(options);
 
-    const row = new ActionRowBuilder().addComponents(selectMenu);
-
-    const response = await interaction.editReply({
-      embeds: [embed],
-      components: [row]
-    });
+    const response = await interaction.editReply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
 
     try {
       const collector = response.createMessageComponentCollector({
@@ -101,73 +72,60 @@ module.exports = {
 
       collector.on('collect', async i => {
         const selection = i.values[0];
-        
         try {
-          const notificationChannel = await client.channels.fetch(guildConfig.channelId);
-          
           if (selection === 'post-all') {
-            for (const video of latestVideos) {
-              const message = guildConfig.youtube.message
-                .replace('{channel}', video.snippet.channelTitle)
-                .replace('{title}', video.snippet.title);
-
-              const videoUrl = `https://www.youtube.com/watch?v=${video.id.videoId}`;
-              await notificationChannel.send(`${message}\n${videoUrl}`);
+            let posted = 0, skipped = 0;
+            for (let idx = 0; idx < latestVideos.length; idx++) {
+              const video = latestVideos[idx];
+              const ytChannelId = videoChannelMap[idx];
+              const notifChannelId = resolveYouTubeChannel(guildConfig, ytChannelId);
+              if (!notifChannelId) { skipped++; continue; }
+              const notifChannel = await client.channels.fetch(notifChannelId);
+              if (notifChannel) {
+                const message = guildConfig.youtube.message
+                  .replace('{channel}', video.snippet.channelTitle)
+                  .replace('{title}', video.snippet.title);
+                await notifChannel.send(`${message}\nhttps://www.youtube.com/watch?v=${video.id.videoId}`);
+                posted++;
+              }
             }
-
             await i.update({
-              content: `✅ Posted all ${latestVideos.length} video(s) to ${notificationChannel}!`,
-              embeds: [],
-              components: []
+              content: `✅ Posted ${posted} video(s) to their configured channels!${skipped ? ` (${skipped} skipped — no channel set)` : ''}`,
+              embeds: [], components: []
             });
-            console.log(`Manual YouTube check by ${interaction.user.tag} in guild ${interaction.guildId}: posted ${latestVideos.length} videos`);
           } else {
             const videoIndex = parseInt(selection.split('-')[1]);
             const video = latestVideos[videoIndex];
-
+            const ytChannelId = videoChannelMap[videoIndex];
+            const notifChannelId = resolveYouTubeChannel(guildConfig, ytChannelId);
+            if (!notifChannelId) {
+              return await i.update({ content: `❌ No notification channel configured for **${video.snippet.channelTitle}**. Use \`/addchannel\` to set one.`, embeds: [], components: [] });
+            }
+            const notifChannel = await client.channels.fetch(notifChannelId);
             const message = guildConfig.youtube.message
               .replace('{channel}', video.snippet.channelTitle)
               .replace('{title}', video.snippet.title);
-
-            const videoUrl = `https://www.youtube.com/watch?v=${video.id.videoId}`;
-            await notificationChannel.send(`${message}\n${videoUrl}`);
-
+            await notifChannel.send(`${message}\nhttps://www.youtube.com/watch?v=${video.id.videoId}`);
             await i.update({
-              content: `✅ Posted video from **${video.snippet.channelTitle}** to ${notificationChannel}!\n\n**Title:** ${video.snippet.title}`,
-              embeds: [],
-              components: []
+              content: `✅ Posted video from **${video.snippet.channelTitle}** to ${notifChannel}!\n\n**Title:** ${video.snippet.title}`,
+              embeds: [], components: []
             });
-            console.log(`Manual YouTube check by ${interaction.user.tag} in guild ${interaction.guildId}: posted 1 video`);
           }
         } catch (error) {
-          console.error('Error posting to channel:', error);
-          await i.update({
-            content: '❌ Error posting to the notification channel!',
-            embeds: [],
-            components: []
-          });
+          console.error('Error posting video:', error);
+          await i.update({ content: '❌ Error posting to the notification channel!', embeds: [], components: [] });
         }
-
         collector.stop();
       });
 
       collector.on('end', (collected, reason) => {
         if (reason === 'time') {
-          interaction.editReply({
-            content: '⏱️ Selection timed out. No videos were posted.',
-            embeds: [],
-            components: []
-          }).catch(console.error);
+          interaction.editReply({ content: '⏱️ Selection timed out.', embeds: [], components: [] }).catch(console.error);
         }
       });
-
     } catch (error) {
       console.error('Error handling video selection:', error);
-      await interaction.editReply({
-        content: '❌ An error occurred. Please try again.',
-        embeds: [],
-        components: []
-      });
+      await interaction.editReply({ content: '❌ An error occurred. Please try again.', embeds: [], components: [] });
     }
   }
 };

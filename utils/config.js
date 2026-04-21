@@ -2,7 +2,6 @@
 const fs = require('fs');
 const config = require('../config.json');
 
-// Get or create guild configuration
 function getGuildConfig(guildId) {
   if (!config.guilds[guildId]) {
     config.guilds[guildId] = {
@@ -24,7 +23,6 @@ function getGuildConfig(guildId) {
   return config.guilds[guildId];
 }
 
-// Save configuration to file
 function saveConfig() {
   try {
     fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
@@ -35,7 +33,6 @@ function saveConfig() {
   }
 }
 
-// Delete guild configuration when bot is removed
 function deleteGuildConfig(guildId) {
   if (config.guilds[guildId]) {
     delete config.guilds[guildId];
@@ -45,8 +42,26 @@ function deleteGuildConfig(guildId) {
   return false;
 }
 
+/**
+ * Resolve the Discord channel to post a Twitch notification to.
+ * Priority: per-streamer channel > guild fallback channel
+ */
+function resolveStreamerChannel(guildConfig, username) {
+  return guildConfig.twitch.streamerChannels?.[username] || guildConfig.channelId;
+}
+
+/**
+ * Resolve the Discord channel to post a YouTube notification to.
+ * Priority: per-YT-channel setting > guild fallback channel
+ */
+function resolveYouTubeChannel(guildConfig, ytChannelId) {
+  return guildConfig.youtube.channelNotifChannels?.[ytChannelId] || guildConfig.channelId;
+}
+
 module.exports = {
   getGuildConfig,
   saveConfig,
-  deleteGuildConfig
+  deleteGuildConfig,
+  resolveStreamerChannel,
+  resolveYouTubeChannel
 };
