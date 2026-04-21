@@ -1,36 +1,28 @@
-const { SlashCommandBuilder: SlashCommandBuilder2, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder: ActionRowBuilder2, StringSelectMenuBuilder } = require('discord.js');
-const { getGuildConfig: getGuildConfig2 } = require('../utils/config');
+// commands/nudgetwitch.js
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { getGuildConfig, resolveStreamerChannel } = require('../utils/config');
 
 module.exports = {
-  data: new SlashCommandBuilder2()
+  data: new SlashCommandBuilder()
     .setName('nudgetwitch')
     .setDescription('Manually check for live Twitch streams and post them'),
-  
+
   async execute(interaction, client, config, monitors) {
     await interaction.deferReply();
-    
-    const guildConfig = getGuildConfig2(interaction.guildId);
-    
-    if (!guildConfig.channelId) {
-      return interaction.editReply('❌ No notification channel set! Use `/setup` first.');
-    }
-    
+
+    const guildConfig = getGuildConfig(interaction.guildId);
+
     if (guildConfig.twitch.usernames.length === 0) {
       return interaction.editReply('📋 No Twitch streamers are currently being monitored. Use `/addstreamer` to add some!');
     }
-    
+
     try {
       const liveStreams = await monitors.twitchMonitor.checkSpecificStreamers(guildConfig.twitch.usernames);
-      
+
       if (liveStreams.length === 0) {
         return interaction.editReply('🔭 None of the monitored streamers are currently live.');
       }
-      
-      const channel = await client.channels.fetch(guildConfig.channelId);
-      if (!channel) {
-        return interaction.editReply('❌ Could not find the notification channel. Please run `/setup` again.');
-      }
-      
+
       const listEmbed = new EmbedBuilder()
         .setColor('#9146FF')
         .setTitle('🔴 Live Streams Found')
@@ -38,29 +30,23 @@ module.exports = {
         .setTimestamp();
 
       liveStreams.forEach((stream, index) => {
+        const notifChannelId = resolveStreamerChannel(guildConfig, stream.user_login);
+        const channelStr = notifChannelId ? `<#${notifChannelId}>` : '⚠️ No channel';
         listEmbed.addFields({
           name: `${index + 1}. ${stream.user_name}`,
-          value: `**${stream.title || 'Untitled Stream'}**\nPlaying: ${stream.game_name || 'Unknown'}\nViewers: ${stream.viewer_count.toLocaleString()}\n[Watch](https://twitch.tv/${stream.user_login})`,
+          value: `**${stream.title || 'Untitled Stream'}**\nPlaying: ${stream.game_name || 'Unknown'} • Viewers: ${stream.viewer_count.toLocaleString()}\n📢 → ${channelStr}\n[Watch](https://twitch.tv/${stream.user_login})`,
           inline: false
         });
       });
 
       const options = [
-        {
-          label: '✅ Post All Streams',
-          description: `Post all ${liveStreams.length} live stream(s) to the notification channel`,
-          value: 'post-all',
-          emoji: '📤'
-        }
+        { label: '✅ Post All Streams', description: `Post all ${liveStreams.length} stream(s) to their configured channels`, value: 'post-all', emoji: '📤' }
       ];
-
       liveStreams.slice(0, 24).forEach((stream, index) => {
-        const hasCustomMessage = guildConfig.twitch.customMessages && 
-                                 guildConfig.twitch.customMessages[stream.user_login];
-        
+        const notifChannelId = resolveStreamerChannel(guildConfig, stream.user_login);
         options.push({
           label: `${stream.user_name} - ${stream.game_name || 'Unknown'}`.substring(0, 100),
-          description: `${stream.viewer_count.toLocaleString()} viewers${hasCustomMessage ? ' • Custom notification' : ''}`.substring(0, 100),
+          description: `${stream.viewer_count.toLocaleString()} viewers • → ${notifChannelId ? `#channel` : 'No channel set'}`.substring(0, 100),
           value: `stream-${index}`,
           emoji: '🎮'
         });
@@ -71,12 +57,7 @@ module.exports = {
         .setPlaceholder('Choose which streams to post')
         .addOptions(options);
 
-      const row = new ActionRowBuilder2().addComponents(selectMenu);
-
-      const response = await interaction.editReply({
-        embeds: [listEmbed],
-        components: [row]
-      });
+      const response = await interaction.editReply({ embeds: [listEmbed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
 
       const collector = response.createMessageComponentCollector({
         filter: i => i.user.id === interaction.user.id,
@@ -85,59 +66,47 @@ module.exports = {
 
       collector.on('collect', async i => {
         const selection = i.values[0];
-        
         try {
-          let postedCount = 0;
-
           if (selection === 'post-all') {
+            let posted = 0, skipped = 0;
             for (const stream of liveStreams) {
-              await postStreamNotification(stream, guildConfig, channel);
-              postedCount++;
+              const notifChannelId = resolveStreamerChannel(guildConfig, stream.user_login);
+              if (!notifChannelId) { skipped++; continue; }
+              const channel = await client.channels.fetch(notifChannelId);
+              if (channel) { await postStreamNotification(stream, guildConfig, channel); posted++; }
             }
-
             await i.update({
-              content: `✅ Posted all ${postedCount} live stream(s) to ${channel}!`,
-              embeds: [],
-              components: []
+              content: `✅ Posted ${posted} stream(s) to their configured channels!${skipped ? ` (${skipped} skipped — no channel set)` : ''}`,
+              embeds: [], components: []
             });
-            console.log(`Manual Twitch check by ${interaction.user.tag} in guild ${interaction.guildId}: posted ${postedCount} streams`);
           } else {
-            const streamIndex = parseInt(selection.split('-')[1]);
-            const stream = liveStreams[streamIndex];
-
+            const stream = liveStreams[parseInt(selection.split('-')[1])];
+            const notifChannelId = resolveStreamerChannel(guildConfig, stream.user_login);
+            if (!notifChannelId) {
+              return await i.update({ content: `❌ No notification channel configured for **${stream.user_name}**. Use \`/addstreamer\` to set one.`, embeds: [], components: [] });
+            }
+            const channel = await client.channels.fetch(notifChannelId);
             await postStreamNotification(stream, guildConfig, channel);
-
             await i.update({
-              content: `✅ Posted **${stream.user_name}**'s stream to ${channel}!\n\n**Title:** ${stream.title || 'Untitled Stream'}\n**Game:** ${stream.game_name || 'Unknown'}\n**Viewers:** ${stream.viewer_count.toLocaleString()}`,
-              embeds: [],
-              components: []
+              content: `✅ Posted **${stream.user_name}**'s stream to ${channel}!\n**Title:** ${stream.title || 'Untitled'} • **Game:** ${stream.game_name || 'Unknown'} • **Viewers:** ${stream.viewer_count.toLocaleString()}`,
+              embeds: [], components: []
             });
-            console.log(`Manual Twitch check by ${interaction.user.tag} in guild ${interaction.guildId}: posted 1 stream`);
           }
         } catch (error) {
           console.error('Error posting stream:', error);
-          await i.update({
-            content: '❌ Error posting to the notification channel!',
-            embeds: [],
-            components: []
-          });
+          await i.update({ content: '❌ Error posting to the notification channel!', embeds: [], components: [] });
         }
-
         collector.stop();
       });
 
       collector.on('end', (collected, reason) => {
         if (reason === 'time') {
-          interaction.editReply({
-            content: '⏱️ Selection timed out. No streams were posted.',
-            embeds: [],
-            components: []
-          }).catch(console.error);
+          interaction.editReply({ content: '⏱️ Selection timed out.', embeds: [], components: [] }).catch(console.error);
         }
       });
-      
+
     } catch (error) {
-      console.error('Error in nudgetwitch command:', error);
+      console.error('Error in nudgetwitch:', error);
       await interaction.editReply('❌ An error occurred while checking streams. Please try again later.');
     }
   }
@@ -145,12 +114,7 @@ module.exports = {
 
 async function postStreamNotification(stream, guildConfig, channel) {
   const username = stream.user_login;
-  let messageText = guildConfig.twitch.message;
-  
-  if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
-    messageText = guildConfig.twitch.customMessages[username];
-  }
-  
+  let messageText = guildConfig.twitch.customMessages?.[username] || guildConfig.twitch.message;
   messageText = messageText
     .replace(/{username}/g, stream.user_name)
     .replace(/{title}/g, stream.title)
@@ -161,11 +125,7 @@ async function postStreamNotification(stream, guildConfig, channel) {
     .setColor('#9146FF')
     .setTitle(stream.title || 'Untitled Stream')
     .setURL(`https://twitch.tv/${stream.user_login}`)
-    .setAuthor({
-      name: `${stream.user_name} is now live on Twitch!`,
-      iconURL: 'https://cdn.discordapp.com/attachments/your-attachment-id/twitch-icon.png',
-      url: `https://twitch.tv/${stream.user_login}`
-    })
+    .setAuthor({ name: `${stream.user_name} is now live on Twitch!`, url: `https://twitch.tv/${stream.user_login}` })
     .setDescription(`**Playing ${stream.game_name || 'Unknown'}**`)
     .setImage(stream.thumbnail_url.replace('{width}', '1920').replace('{height}', '1080') + `?t=${Date.now()}`)
     .addFields(
@@ -176,16 +136,8 @@ async function postStreamNotification(stream, guildConfig, channel) {
     .setFooter({ text: 'Twitch • Manual Check' });
 
   const button = new ButtonBuilder()
-    .setLabel('Watch Now')
-    .setStyle(ButtonStyle.Link)
-    .setURL(`https://twitch.tv/${stream.user_login}`)
-    .setEmoji('🔴');
+    .setLabel('Watch Now').setStyle(ButtonStyle.Link)
+    .setURL(`https://twitch.tv/${stream.user_login}`).setEmoji('🔴');
 
-  const row = new ActionRowBuilder2().addComponents(button);
-
-  await channel.send({
-    content: messageText,
-    embeds: [embed],
-    components: [row]
-  });
+  await channel.send({ content: messageText, embeds: [embed], components: [new ActionRowBuilder().addComponents(button)] });
 }

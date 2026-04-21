@@ -1,13 +1,14 @@
 // modules/twitch.js
 const axios = require('axios');
 const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { resolveStreamerChannel } = require('../utils/config');
 
 class TwitchMonitor {
   constructor(client, config) {
     this.client = client;
     this.config = config;
     this.accessToken = null;
-    this.liveStreamers = new Map(); // Map of guildId -> Map of username -> { game_id, messageId, stream_id, memberId, channelId }
+    this.liveStreamers = new Map(); // guildId -> Map<username, { game_id, messageId, stream_id, memberId, channelId }>
     this.connectedAccountsCache = new Map();
   }
 
@@ -20,7 +21,6 @@ class TwitchMonitor {
           grant_type: 'client_credentials'
         }
       });
-      
       this.accessToken = response.data.access_token;
       console.log('Twitch access token obtained');
       return this.accessToken;
@@ -31,70 +31,33 @@ class TwitchMonitor {
   }
 
   findMemberByTwitchUsername(members, twitchUsername) {
-    let member = members.find(m => 
-      m.nickname?.toLowerCase() === twitchUsername.toLowerCase()
+    return (
+      members.find(m => m.nickname?.toLowerCase() === twitchUsername.toLowerCase()) ||
+      members.find(m => m.user.username.toLowerCase() === twitchUsername.toLowerCase()) ||
+      members.find(m => m.nickname?.toLowerCase().includes(twitchUsername.toLowerCase())) ||
+      members.find(m => m.user.username.toLowerCase().includes(twitchUsername.toLowerCase()))
     );
-    
-    if (!member) {
-      member = members.find(m => 
-        m.user.username.toLowerCase() === twitchUsername.toLowerCase()
-      );
-    }
-    
-    if (!member) {
-      member = members.find(m => 
-        m.nickname?.toLowerCase().includes(twitchUsername.toLowerCase())
-      );
-    }
-    
-    if (!member) {
-      member = members.find(m => 
-        m.user.username.toLowerCase().includes(twitchUsername.toLowerCase())
-      );
-    }
-    
-    return member;
   }
 
   async assignLiveRole(guild, guildConfig, username, memberId = null) {
     if (!guildConfig.liveRoleId) return;
-
     try {
       const role = await guild.roles.fetch(guildConfig.liveRoleId);
-      if (!role) {
-        console.log(`Live role ${guildConfig.liveRoleId} not found in guild ${guild.id}`);
-        return;
-      }
+      if (!role) return;
 
-      let member;
-      if (memberId) {
-        member = await guild.members.fetch(memberId);
-      } else {
-        member = this.findMemberByTwitchUsername(guild.members.cache, username);
-        
-        if (!member) {
-          const fetchedMembers = await guild.members.fetch();
-          member = this.findMemberByTwitchUsername(fetchedMembers, username);
-        }
-      }
-
+      let member = memberId ? await guild.members.fetch(memberId) : this.findMemberByTwitchUsername(guild.members.cache, username);
       if (!member) {
-        console.log(`Could not find Discord member for Twitch user ${username} in guild ${guild.id}`);
-        return;
+        const fetchedMembers = await guild.members.fetch();
+        member = this.findMemberByTwitchUsername(fetchedMembers, username);
       }
-
-      if (member.roles.cache.has(role.id)) {
-        console.log(`Member ${member.user.tag} already has live role`);
-        return;
-      }
+      if (!member) { console.log(`Could not find Discord member for Twitch user ${username}`); return; }
+      if (member.roles.cache.has(role.id)) return;
 
       await member.roles.add(role);
-      console.log(`✅ Assigned live role to ${member.user.tag} (${username}) in guild ${guild.id}`);
-      
+      console.log(`✅ Assigned live role to ${member.user.tag} (${username})`);
+
       const liveMap = this.liveStreamers.get(guild.id);
-      if (liveMap && liveMap.has(username)) {
-        liveMap.get(username).memberId = member.id;
-      }
+      if (liveMap?.has(username)) liveMap.get(username).memberId = member.id;
     } catch (error) {
       console.error(`Error assigning live role to ${username}:`, error.message);
     }
@@ -102,38 +65,20 @@ class TwitchMonitor {
 
   async removeLiveRole(guild, guildConfig, username, memberId = null) {
     if (!guildConfig.liveRoleId) return;
-
     try {
       const role = await guild.roles.fetch(guildConfig.liveRoleId);
-      if (!role) {
-        console.log(`Live role ${guildConfig.liveRoleId} not found in guild ${guild.id}`);
-        return;
-      }
+      if (!role) return;
 
-      let member;
-      if (memberId) {
-        member = await guild.members.fetch(memberId);
-      } else {
-        member = this.findMemberByTwitchUsername(guild.members.cache, username);
-        
-        if (!member) {
-          const fetchedMembers = await guild.members.fetch();
-          member = this.findMemberByTwitchUsername(fetchedMembers, username);
-        }
-      }
-
+      let member = memberId ? await guild.members.fetch(memberId) : this.findMemberByTwitchUsername(guild.members.cache, username);
       if (!member) {
-        console.log(`Could not find Discord member for Twitch user ${username} in guild ${guild.id}`);
-        return;
+        const fetchedMembers = await guild.members.fetch();
+        member = this.findMemberByTwitchUsername(fetchedMembers, username);
       }
-
-      if (!member.roles.cache.has(role.id)) {
-        console.log(`Member ${member.user.tag} doesn't have live role`);
-        return;
-      }
+      if (!member) { console.log(`Could not find Discord member for Twitch user ${username}`); return; }
+      if (!member.roles.cache.has(role.id)) return;
 
       await member.roles.remove(role);
-      console.log(`❌ Removed live role from ${member.user.tag} (${username}) in guild ${guild.id}`);
+      console.log(`❌ Removed live role from ${member.user.tag} (${username})`);
     } catch (error) {
       console.error(`Error removing live role from ${username}:`, error.message);
     }
@@ -146,18 +91,20 @@ class TwitchMonitor {
     }
 
     for (const [guildId, guildConfig] of Object.entries(this.config.guilds)) {
-      if (!guildConfig.channelId || !guildConfig.twitch.usernames.length) {
-        continue;
-      }
+      if (!guildConfig.twitch.usernames.length) continue;
 
-      if (!this.liveStreamers.has(guildId)) {
-        this.liveStreamers.set(guildId, new Map());
-      }
-
+      if (!this.liveStreamers.has(guildId)) this.liveStreamers.set(guildId, new Map());
       const liveMap = this.liveStreamers.get(guildId);
       const guild = await this.client.guilds.fetch(guildId);
 
       for (const username of guildConfig.twitch.usernames) {
+        // Resolve the notification channel for this specific streamer
+        const notifChannelId = resolveStreamerChannel(guildConfig, username);
+        if (!notifChannelId) {
+          console.warn(`No notification channel for streamer ${username} in guild ${guildId}, skipping`);
+          continue;
+        }
+
         try {
           const response = await axios.get('https://api.twitch.tv/helix/streams', {
             params: { user_login: username },
@@ -171,62 +118,36 @@ class TwitchMonitor {
 
           if (stream && stream.type === 'live') {
             const currentGameId = stream.game_id;
-            const currentStreamId = stream.id; // Unique ID for this specific stream session
+            const currentStreamId = stream.id;
             const lastNotification = liveMap.get(username);
 
             if (!lastNotification) {
-              // First time going live - send new notification
-              const messageId = await this.sendNotification(stream, guildId, guildConfig);
+              const messageId = await this.sendNotification(stream, guildId, guildConfig, notifChannelId);
               if (messageId) {
-                liveMap.set(username, { 
-                  game_id: currentGameId, 
-                  memberId: null,
-                  messageId: messageId,
-                  channelId: guildConfig.channelId,
-                  stream_id: currentStreamId
-                });
+                liveMap.set(username, { game_id: currentGameId, memberId: null, messageId, channelId: notifChannelId, stream_id: currentStreamId });
                 await this.assignLiveRole(guild, guildConfig, username);
               }
             } else if (lastNotification.stream_id !== currentStreamId) {
-              // Different stream session (they went offline and came back online)
-              // Send new notification first, then only update role if successful
-              const messageId = await this.sendNotification(stream, guildId, guildConfig);
+              const messageId = await this.sendNotification(stream, guildId, guildConfig, notifChannelId);
               if (messageId) {
-                // Only remove old role and assign new one if notification was successful
                 await this.removeLiveRole(guild, guildConfig, username, lastNotification.memberId);
-                
-                liveMap.set(username, { 
-                  game_id: currentGameId, 
-                  memberId: null,
-                  messageId: messageId,
-                  channelId: guildConfig.channelId,
-                  stream_id: currentStreamId
-                });
-                
+                liveMap.set(username, { game_id: currentGameId, memberId: null, messageId, channelId: notifChannelId, stream_id: currentStreamId });
                 await this.assignLiveRole(guild, guildConfig, username);
-                console.log(`🔄 New stream session detected for ${stream.user_name} (Stream ID: ${currentStreamId})`);
-              } else {
-                console.log(`⚠️ Failed to send notification for new stream session of ${stream.user_name}, will retry on next check`);
+                console.log(`🔄 New stream session for ${stream.user_name}`);
               }
             } else if (lastNotification.game_id !== currentGameId) {
-              // Same stream session but game changed - update existing notification
               const updateSuccess = await this.updateNotification(stream, guildId, guildConfig, lastNotification);
               if (updateSuccess) {
                 liveMap.get(username).game_id = currentGameId;
-                console.log(`🎮 Updated notification for ${stream.user_name} - game changed to ${stream.game_name}`);
-              } else {
-                console.log(`⚠️ Failed to update notification for ${stream.user_name}, will retry on next check`);
+                console.log(`🎮 Updated notification for ${stream.user_name} - now playing ${stream.game_name}`);
               }
             }
-            // else: same stream, same game - no action needed (skip duplicate)
           } else {
-            // Streamer is offline
             if (liveMap.has(username)) {
               const cachedData = liveMap.get(username);
-              // Always remove the live role when streamer goes offline
               await this.removeLiveRole(guild, guildConfig, username, cachedData?.memberId);
               liveMap.delete(username);
-              console.log(`📴 ${username} went offline in guild ${guild.id}, removed live role`);
+              console.log(`📴 ${username} went offline in guild ${guildId}`);
             }
           }
         } catch (error) {
@@ -241,21 +162,13 @@ class TwitchMonitor {
     }
   }
 
-  async sendNotification(stream, guildId, guildConfig) {
+  async sendNotification(stream, guildId, guildConfig, notifChannelId) {
     try {
-      const channel = await this.client.channels.fetch(guildConfig.channelId);
-      if (!channel) {
-        console.error(`Discord channel not found for guild ${guildId}`);
-        return null;
-      }
+      const channel = await this.client.channels.fetch(notifChannelId);
+      if (!channel) { console.error(`Discord channel ${notifChannelId} not found`); return null; }
 
       const username = stream.user_login;
-      let messageText = guildConfig.twitch.message;
-      
-      if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
-        messageText = guildConfig.twitch.customMessages[username];
-      }
-
+      let messageText = guildConfig.twitch.customMessages?.[username] || guildConfig.twitch.message;
       messageText = messageText
         .replace(/{username}/g, stream.user_name)
         .replace(/{title}/g, stream.title)
@@ -266,11 +179,7 @@ class TwitchMonitor {
         .setColor('#9146FF')
         .setTitle(stream.title || 'Untitled Stream')
         .setURL(`https://twitch.tv/${stream.user_login}`)
-        .setAuthor({
-          name: `${stream.user_name} is now live on Twitch!`,
-          iconURL: 'https://cdn.discordapp.com/attachments/your-attachment-id/twitch-icon.png',
-          url: `https://twitch.tv/${stream.user_login}`
-        })
+        .setAuthor({ name: `${stream.user_name} is now live on Twitch!`, url: `https://twitch.tv/${stream.user_login}` })
         .setDescription(`**Playing ${stream.game_name || 'Unknown'}**`)
         .setImage(stream.thumbnail_url.replace('{width}', '1920').replace('{height}', '1080') + `?t=${Date.now()}`)
         .addFields(
@@ -281,54 +190,35 @@ class TwitchMonitor {
         .setFooter({ text: 'Twitch' });
 
       const button = new ButtonBuilder()
-        .setLabel('Watch Now')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`https://twitch.tv/${stream.user_login}`)
-        .setEmoji('🔴');
-
-      const row = new ActionRowBuilder().addComponents(button);
+        .setLabel('Watch Now').setStyle(ButtonStyle.Link)
+        .setURL(`https://twitch.tv/${stream.user_login}`).setEmoji('🔴');
 
       const message = await channel.send({
         content: messageText,
         embeds: [embed],
-        components: [row]
+        components: [new ActionRowBuilder().addComponents(button)]
       });
 
-      console.log(`Sent Twitch notification for ${stream.user_name} to guild ${guildId} (Stream ID: ${stream.id})${guildConfig.twitch.customMessages?.[username] ? ' (custom message)' : ''}`);
-      
+      console.log(`Sent Twitch notification for ${stream.user_name} to channel ${notifChannelId} in guild ${guildId}`);
       return message.id;
     } catch (error) {
-      console.error(`Error sending notification to guild ${guildId}:`, error.message);
+      console.error(`Error sending notification for ${stream.user_name}:`, error.message);
       return null;
     }
   }
 
   async updateNotification(stream, guildId, guildConfig, cachedData) {
     try {
-      if (!cachedData.messageId || !cachedData.channelId) {
-        console.log(`No cached message ID for ${stream.user_name}, cannot update`);
-        return false;
-      }
+      if (!cachedData.messageId || !cachedData.channelId) return false;
 
       const channel = await this.client.channels.fetch(cachedData.channelId);
-      if (!channel) {
-        console.error(`Discord channel not found for guild ${guildId}`);
-        return false;
-      }
+      if (!channel) return false;
 
       const message = await channel.messages.fetch(cachedData.messageId);
-      if (!message) {
-        console.error(`Message ${cachedData.messageId} not found, cannot update`);
-        return false;
-      }
+      if (!message) return false;
 
       const username = stream.user_login;
-      let messageText = guildConfig.twitch.message;
-      
-      if (guildConfig.twitch.customMessages && guildConfig.twitch.customMessages[username]) {
-        messageText = guildConfig.twitch.customMessages[username];
-      }
-
+      let messageText = guildConfig.twitch.customMessages?.[username] || guildConfig.twitch.message;
       messageText = messageText
         .replace(/{username}/g, stream.user_name)
         .replace(/{title}/g, stream.title)
@@ -339,11 +229,7 @@ class TwitchMonitor {
         .setColor('#9146FF')
         .setTitle(stream.title || 'Untitled Stream')
         .setURL(`https://twitch.tv/${stream.user_login}`)
-        .setAuthor({
-          name: `${stream.user_name} is now live on Twitch!`,
-          iconURL: 'https://cdn.discordapp.com/attachments/your-attachment-id/twitch-icon.png',
-          url: `https://twitch.tv/${stream.user_login}`
-        })
+        .setAuthor({ name: `${stream.user_name} is now live on Twitch!`, url: `https://twitch.tv/${stream.user_login}` })
         .setDescription(`**Playing ${stream.game_name || 'Unknown'}** _(Game Changed)_`)
         .setImage(stream.thumbnail_url.replace('{width}', '1920').replace('{height}', '1080') + `?t=${Date.now()}`)
         .addFields(
@@ -354,22 +240,18 @@ class TwitchMonitor {
         .setFooter({ text: 'Twitch • Updated' });
 
       const button = new ButtonBuilder()
-        .setLabel('Watch Now')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`https://twitch.tv/${stream.user_login}`)
-        .setEmoji('🔴');
-
-      const row = new ActionRowBuilder().addComponents(button);
+        .setLabel('Watch Now').setStyle(ButtonStyle.Link)
+        .setURL(`https://twitch.tv/${stream.user_login}`).setEmoji('🔴');
 
       await message.edit({
         content: messageText,
         embeds: [embed],
-        components: [row]
+        components: [new ActionRowBuilder().addComponents(button)]
       });
 
       return true;
     } catch (error) {
-      console.error(`Error updating notification for guild ${guildId}:`, error.message);
+      console.error(`Error updating notification for ${stream.user_name}:`, error.message);
       return false;
     }
   }
@@ -379,28 +261,19 @@ class TwitchMonitor {
       await this.getAccessToken();
       if (!this.accessToken) return [];
     }
-
     const liveStreams = [];
-
     for (const username of usernames) {
       try {
         const response = await axios.get('https://api.twitch.tv/helix/streams', {
           params: { user_login: username },
-          headers: {
-            'Client-ID': process.env.TWITCH_CLIENT_ID,
-            'Authorization': `Bearer ${this.accessToken}`
-          }
+          headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${this.accessToken}` }
         });
-
         const stream = response.data.data[0];
-        if (stream && stream.type === 'live') {
-          liveStreams.push(stream);
-        }
+        if (stream?.type === 'live') liveStreams.push(stream);
       } catch (error) {
-        console.error(`Error checking Twitch stream for ${username}:`, error.message);
+        console.error(`Error checking stream for ${username}:`, error.message);
       }
     }
-
     return liveStreams;
   }
 
@@ -412,9 +285,7 @@ class TwitchMonitor {
   }
 
   stop() {
-    if (this.interval) {
-      clearInterval(this.interval);
-    }
+    if (this.interval) clearInterval(this.interval);
   }
 }
 

@@ -1,3 +1,20 @@
 {
-  "guilds": {}
+  "guilds": {
+    "1460761916619227361": {
+      "channelId": null,
+      "twitchChannelId": null,
+      "youtubeChannelId": null,
+      "liveRoleId": null,
+      "twitch": {
+        "usernames": [],
+        "checkInterval": 60000,
+        "message": "🔴 {username} is now live on Twitch!\n**{title}**\nPlaying: {game}"
+      },
+      "youtube": {
+        "channelIds": [],
+        "checkInterval": 300000,
+        "message": "📺 {channel} just uploaded a new video!\n**{title}**"
+      }
+    }
+  }
 }

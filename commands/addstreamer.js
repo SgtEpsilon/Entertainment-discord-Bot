@@ -1,12 +1,13 @@
-const { SlashCommandBuilder: SlashCommandBuilder3, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder: ActionRowBuilder2 } = require('discord.js');
-const { getGuildConfig: getGuildConfig3, saveConfig: saveConfig3 } = require('../utils/config');
+// commands/addstreamer.js
+const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ChannelType } = require('discord.js');
+const { getGuildConfig, saveConfig } = require('../utils/config');
 const axios = require('axios');
 
 module.exports = {
-  data: new SlashCommandBuilder3()
+  data: new SlashCommandBuilder()
     .setName('addstreamer')
-    .setDescription('Add a Twitch streamer to the monitoring list with optional custom notification'),
-  
+    .setDescription('Add a Twitch streamer to the monitoring list'),
+
   async execute(interaction, client, config, monitors) {
     const modal = new ModalBuilder()
       .setCustomId('addstreamer-modal')
@@ -18,8 +19,15 @@ module.exports = {
       .setStyle(TextInputStyle.Short)
       .setPlaceholder('e.g., shroud, xqc, pokimane')
       .setRequired(true)
-      .setMinLength(4)
+      .setMinLength(1)
       .setMaxLength(25);
+
+    const channelInput = new TextInputBuilder()
+      .setCustomId('notif-channel')
+      .setLabel('Notification Channel (Optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('e.g., #gaming-streams or channel ID — leave blank for default')
+      .setRequired(false);
 
     const messageInput = new TextInputBuilder()
       .setCustomId('custom-message')
@@ -29,9 +37,11 @@ module.exports = {
       .setRequired(false)
       .setMaxLength(500);
 
-    const usernameRow = new ActionRowBuilder2().addComponents(usernameInput);
-    const messageRow = new ActionRowBuilder2().addComponents(messageInput);
-    modal.addComponents(usernameRow, messageRow);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(usernameInput),
+      new ActionRowBuilder().addComponents(channelInput),
+      new ActionRowBuilder().addComponents(messageInput)
+    );
 
     await interaction.showModal(modal);
 
@@ -44,48 +54,75 @@ module.exports = {
       await submitted.deferReply();
 
       const username = submitted.fields.getTextInputValue('username').toLowerCase().trim();
+      const channelRaw = submitted.fields.getTextInputValue('notif-channel').trim();
       const customMessage = submitted.fields.getTextInputValue('custom-message').trim() || null;
 
-      if (!/^[a-zA-Z0-9_]{4,25}$/.test(username)) {
-        return submitted.editReply('❌ Invalid Twitch username format. Usernames must be 4-25 characters long and can only contain letters, numbers, and underscores.');
+      if (!/^[a-zA-Z0-9_]{1,25}$/.test(username)) {
+        return submitted.editReply('❌ Invalid Twitch username format. Usernames can only contain letters, numbers, and underscores (max 25 characters).');
       }
 
-      const guildConfig = getGuildConfig3(interaction.guildId);
+      const guildConfig = getGuildConfig(interaction.guildId);
 
       if (guildConfig.twitch.usernames.includes(username)) {
         return submitted.editReply(`❌ **${username}** is already being monitored!`);
       }
 
+      // Resolve the notification channel from the text input
+      let notifChannel = null;
+      if (channelRaw) {
+        // Strip leading # and any <#id> mention formatting
+        const cleaned = channelRaw.replace(/^#/, '').replace(/^<#(\d+)>$/, '$1');
+        // Try by ID first, then by name
+        notifChannel =
+          interaction.guild.channels.cache.get(cleaned) ||
+          interaction.guild.channels.cache.find(
+            c => c.type === ChannelType.GuildText && c.name.toLowerCase() === cleaned.toLowerCase()
+          );
+
+        if (!notifChannel) {
+          return submitted.editReply(`❌ Could not find a text channel matching **${channelRaw}**. Use the channel name (e.g. \`gaming-streams\`) or its ID.`);
+        }
+      }
+
       try {
         const isValid = await validateTwitchUser(username);
         if (!isValid) {
-          return submitted.editReply(`❌ Twitch user **${username}** does not exist or could not be found. Please check the username and try again.`);
+          return submitted.editReply(`❌ Twitch user **${username}** does not exist or could not be found.`);
         }
       } catch (error) {
         console.error(`Error validating Twitch user ${username}:`, error.message);
-        return submitted.editReply(`❌ Error validating Twitch user **${username}**. This could mean:\n• The username doesn't exist\n• Twitch API is unavailable\n• Invalid API credentials\n\nPlease verify the username and try again.`);
+        return submitted.editReply(`❌ Error validating Twitch user **${username}**. Please verify the username and try again.`);
       }
 
       guildConfig.twitch.usernames.push(username);
 
       if (customMessage) {
-        if (!guildConfig.twitch.customMessages) {
-          guildConfig.twitch.customMessages = {};
-        }
+        if (!guildConfig.twitch.customMessages) guildConfig.twitch.customMessages = {};
         guildConfig.twitch.customMessages[username] = customMessage;
       }
 
-      if (saveConfig3()) {
-        let reply = `✅ Added **${username}** to the monitoring list!\n\nThe bot will check if they go live every minute.`;
-        
+      if (notifChannel) {
+        if (!guildConfig.twitch.streamerChannels) guildConfig.twitch.streamerChannels = {};
+        guildConfig.twitch.streamerChannels[username] = notifChannel.id;
+      }
+
+      if (saveConfig()) {
+        const channelInfo = notifChannel
+          ? `\n📢 Notifications → <#${notifChannel.id}>`
+          : guildConfig.channelId
+            ? `\n📢 Notifications → <#${guildConfig.channelId}> *(fallback)*`
+            : `\n⚠️ No notification channel set — run \`/setup\` or specify a channel when adding.`;
+
+        let reply = `✅ Added **${username}** to the monitoring list!${channelInfo}\n\nThe bot will check if they go live every minute.`;
+
         if (customMessage) {
-          reply += `\n\n**Custom notification set:**\n\`\`\`${customMessage}\`\`\``;
+          reply += `\n\n**Custom notification:**\n\`\`\`${customMessage}\`\`\``;
         } else {
           reply += `\n\n**Using default notification:**\n\`\`\`${guildConfig.twitch.message}\`\`\``;
         }
 
         await submitted.editReply(reply);
-        console.log(`Guild ${interaction.guildId} added ${username} to Twitch monitoring${customMessage ? ' with custom message' : ''}`);
+        console.log(`Guild ${interaction.guildId} added ${username} to Twitch monitoring (channel: ${notifChannel?.id || 'fallback'})`);
       } else {
         await submitted.editReply('❌ Error saving configuration. Please try again.');
       }
@@ -107,7 +144,6 @@ async function validateTwitchUser(username) {
         grant_type: 'client_credentials'
       }
     });
-
     const accessToken = tokenResponse.data.access_token;
 
     const userResponse = await axios.get('https://api.twitch.tv/helix/users', {
@@ -120,9 +156,34 @@ async function validateTwitchUser(username) {
 
     return userResponse.data.data && userResponse.data.data.length > 0;
   } catch (error) {
-    if (error.response?.status === 400) {
-      return false;
-    }
+    if (error.response?.status === 400) return false;
+    throw error;
+  }
+}
+
+
+async function validateTwitchUser(username) {
+  try {
+    const tokenResponse = await axios.post('https://id.twitch.tv/oauth2/token', null, {
+      params: {
+        client_id: process.env.TWITCH_CLIENT_ID,
+        client_secret: process.env.TWITCH_CLIENT_SECRET,
+        grant_type: 'client_credentials'
+      }
+    });
+    const accessToken = tokenResponse.data.access_token;
+
+    const userResponse = await axios.get('https://api.twitch.tv/helix/users', {
+      params: { login: username },
+      headers: {
+        'Client-ID': process.env.TWITCH_CLIENT_ID,
+        'Authorization': `Bearer ${accessToken}`
+      }
+    });
+
+    return userResponse.data.data && userResponse.data.data.length > 0;
+  } catch (error) {
+    if (error.response?.status === 400) return false;
     throw error;
   }
 }
