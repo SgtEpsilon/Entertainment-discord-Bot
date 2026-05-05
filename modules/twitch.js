@@ -8,7 +8,7 @@ class TwitchMonitor {
     this.client = client;
     this.config = config;
     this.accessToken = null;
-    this.liveStreamers = new Map(); // guildId -> Map<username, { game_id, messageId, stream_id, memberId, channelId }>
+    this.liveStreamers = new Map(); // guildId -> Map<username, { game_id, messageId, memberId, channelId }>
     this.connectedAccountsCache = new Map();
   }
 
@@ -118,31 +118,26 @@ class TwitchMonitor {
 
           if (stream && stream.type === 'live') {
             const currentGameId = stream.game_id;
-            const currentStreamId = stream.id;
             const lastNotification = liveMap.get(username);
 
             if (!lastNotification) {
+              // First time going live - send new notification
               const messageId = await this.sendNotification(stream, guildId, guildConfig, notifChannelId);
               if (messageId) {
-                liveMap.set(username, { game_id: currentGameId, memberId: null, messageId, channelId: notifChannelId, stream_id: currentStreamId });
+                liveMap.set(username, { game_id: currentGameId, memberId: null, messageId, channelId: notifChannelId });
                 await this.assignLiveRole(guild, guildConfig, username);
-              }
-            } else if (lastNotification.stream_id !== currentStreamId) {
-              const messageId = await this.sendNotification(stream, guildId, guildConfig, notifChannelId);
-              if (messageId) {
-                await this.removeLiveRole(guild, guildConfig, username, lastNotification.memberId);
-                liveMap.set(username, { game_id: currentGameId, memberId: null, messageId, channelId: notifChannelId, stream_id: currentStreamId });
-                await this.assignLiveRole(guild, guildConfig, username);
-                console.log(`🔄 New stream session for ${stream.user_name}`);
               }
             } else if (lastNotification.game_id !== currentGameId) {
+              // Game changed - update existing notification
               const updateSuccess = await this.updateNotification(stream, guildId, guildConfig, lastNotification);
               if (updateSuccess) {
                 liveMap.get(username).game_id = currentGameId;
                 console.log(`🎮 Updated notification for ${stream.user_name} - now playing ${stream.game_name}`);
               }
             }
+            // If stream is live and game hasn't changed, do nothing (no duplicate notifications)
           } else {
+            // Stream went offline
             if (liveMap.has(username)) {
               const cachedData = liveMap.get(username);
               await this.removeLiveRole(guild, guildConfig, username, cachedData?.memberId);
