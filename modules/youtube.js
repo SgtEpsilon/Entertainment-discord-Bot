@@ -48,7 +48,7 @@ class YouTubeMonitor {
             } else if (videoId !== lastKnownId) {
               guildLastVideoIds.set(channelId, videoId);
               await this.sendNotification(
-                { id: { videoId }, snippet: { title, channelTitle, publishedAt } },
+                { id: { videoId }, snippet: { title, channelTitle, publishedAt, channelId } },
                 guildId, guildConfig, notifChannelId
               );
             }
@@ -89,7 +89,12 @@ class YouTubeMonitor {
           const v = result.feed.entry[0];
           latestVideos.push({
             id: { videoId: v['yt:videoId'][0] },
-            snippet: { title: v.title[0], channelTitle: v.author[0].name[0], publishedAt: v.published[0] }
+            snippet: { 
+              title: v.title[0], 
+              channelTitle: v.author[0].name[0], 
+              publishedAt: v.published[0],
+              channelId: channelId  // ✅ FIX: Include the YT channel ID for routing
+            }
           });
         }
       } catch (error) {
