@@ -92,47 +92,86 @@ async function validateChannelId(channelId) {
 
 /**
  * Resolve @handle or username to channel ID by scraping the channel page
+ * Uses multiple strategies to extract the channel ID from YouTube's HTML
+ * Prioritizes most reliable sources first (RSS feed, canonical URL)
  */
 async function resolveHandleToChannelId(handle) {
   try {
     // Try @handle format first
-    let url = `https://www.youtube.com/@${handle}`;
-    let response = await axios.get(url, { 
-      timeout: 5000,
+    const url = `https://www.youtube.com/@${handle}`;
+    console.log(`Attempting to resolve YouTube handle: @${handle}`);
+    
+    const response = await axios.get(url, { 
+      timeout: 10000,
+      maxRedirects: 5,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
       }
     });
 
-    // Look for channel ID in the page HTML
-    const channelIdMatch = response.data.match(/"channelId":"(UC[\w-]{22})"/);
-    if (channelIdMatch) {
-      return channelIdMatch[1];
+    const html = response.data;
+
+    // PRIORITY 1: RSS feed link - Most reliable for the actual channel
+    // This appears in <head> and always points to the correct channel
+    const rssFeedMatch = html.match(/<link[^>]*type="application\/rss\+xml"[^>]*href="https?:\/\/www\.youtube\.com\/feeds\/videos\.xml\?channel_id=(UC[\w-]{22})"/);
+    if (rssFeedMatch) {
+      console.log(`✅ Found channel ID via RSS feed link (most reliable): ${rssFeedMatch[1]}`);
+      return rssFeedMatch[1];
     }
 
-    // Also try the externalId field
-    const externalIdMatch = response.data.match(/"externalId":"(UC[\w-]{22})"/);
+    // PRIORITY 2: Canonical link - Very reliable
+    // YouTube sets this to the channel's canonical URL
+    const canonicalMatch = html.match(/<link rel="canonical" href="https?:\/\/www\.youtube\.com\/channel\/(UC[\w-]{22})"/);
+    if (canonicalMatch) {
+      console.log(`✅ Found channel ID via canonical link: ${canonicalMatch[1]}`);
+      return canonicalMatch[1];
+    }
+
+    // PRIORITY 3: Meta property og:url - Also reliable
+    const ogUrlMatch = html.match(/<meta property="og:url" content="https?:\/\/www\.youtube\.com\/channel\/(UC[\w-]{22})"/);
+    if (ogUrlMatch) {
+      console.log(`✅ Found channel ID via og:url meta tag: ${ogUrlMatch[1]}`);
+      return ogUrlMatch[1];
+    }
+
+    // PRIORITY 4: Look in ytInitialData for browse_id
+    // This is in the page's initial data and should be the main channel
+    const browseIdMatch = html.match(/"browseId":"(UC[\w-]{22})"/);
+    if (browseIdMatch) {
+      // Verify this is in the header/channel context, not a related channel
+      const contextCheck = html.substring(Math.max(0, html.indexOf(browseIdMatch[0]) - 500), html.indexOf(browseIdMatch[0]) + 100);
+      if (contextCheck.includes('"header"') || contextCheck.includes('"metadata"')) {
+        console.log(`✅ Found channel ID via browseId in header: ${browseIdMatch[1]}`);
+        return browseIdMatch[1];
+      }
+    }
+
+    // PRIORITY 5: channelId in page metadata
+    // Look specifically in the metadata section
+    const metadataMatch = html.match(/"metadata"[^{]*{[^}]*"channelId":"(UC[\w-]{22})"/);
+    if (metadataMatch) {
+      console.log(`✅ Found channel ID in metadata section: ${metadataMatch[1]}`);
+      return metadataMatch[1];
+    }
+
+    // PRIORITY 6: externalId in header
+    const externalIdMatch = html.match(/"header"[^{]*{[^}]*"externalId":"(UC[\w-]{22})"/);
     if (externalIdMatch) {
+      console.log(`✅ Found channel ID via externalId in header: ${externalIdMatch[1]}`);
       return externalIdMatch[1];
     }
 
-    // Try legacy /user/ format as fallback
-    url = `https://www.youtube.com/user/${handle}`;
-    response = await axios.get(url, { 
-      timeout: 5000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-
-    const legacyMatch = response.data.match(/"channelId":"(UC[\w-]{22})"/);
-    if (legacyMatch) {
-      return legacyMatch[1];
-    }
-
+    console.warn(`⚠️ Could not extract channel ID from @${handle} page`);
+    console.warn(`   Tried: RSS feed link, canonical URL, og:url, browseId, metadata, externalId`);
     return null;
   } catch (error) {
-    console.error(`Failed to resolve handle ${handle}:`, error.message);
+    if (error.response?.status === 404) {
+      console.error(`❌ YouTube handle @${handle} not found (404)`);
+    } else {
+      console.error(`❌ Failed to resolve handle @${handle}: ${error.message}`);
+    }
     return null;
   }
 }

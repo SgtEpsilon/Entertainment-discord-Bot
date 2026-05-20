@@ -17,7 +17,7 @@ module.exports = {
       .setCustomId('yt-channel')
       .setLabel('YouTube Channel')
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Channel URL, @handle, or channel ID (UC...)')
+      .setPlaceholder('@MrBeast, youtube.com/@LinusTechTips, or UC...')
       .setRequired(true);
 
     const notifChannelInput = new TextInputBuilder()
@@ -47,9 +47,38 @@ module.exports = {
 
       const guildConfig = getGuildConfig(interaction.guildId);
 
+      // Show user-friendly message while resolving
+      let statusMessage = '';
+      if (input.startsWith('@')) {
+        statusMessage = `🔍 Resolving YouTube handle **${input}**...`;
+      } else if (input.includes('@')) {
+        const handle = input.match(/@([\w-]+)/)?.[1];
+        statusMessage = `🔍 Resolving YouTube handle **@${handle}**...`;
+      } else if (input.startsWith('UC')) {
+        statusMessage = '✅ Validating channel ID...';
+      } else {
+        statusMessage = '🔍 Looking up YouTube channel...';
+      }
+      
+      await submitted.editReply(statusMessage);
+
       const channelId = await extractYouTubeChannelId(input);
       if (!channelId) {
-        return submitted.editReply('❌ Invalid YouTube channel. Please provide a channel URL (youtube.com/channel/... or youtube.com/@...), @handle, or channel ID (UC...).');
+        return submitted.editReply({
+          content: [
+            '❌ **Could not find YouTube channel**',
+            '',
+            '**Please provide one of the following:**',
+            '• @handle (e.g., `@MrBeast`, `@LinusTechTips`)',
+            '• Full URL (e.g., `youtube.com/@MrBeast`)',
+            '• Channel ID (e.g., `UCX6OQ3DkcsbYNE6H8uQQuVA`)',
+            '',
+            '**Common issues:**',
+            '• Make sure the handle is spelled correctly',
+            '• Some channels may not have an @handle (use channel ID instead)',
+            '• YouTube may be rate-limiting requests (try again in a moment)'
+          ].join('\n')
+        });
       }
 
       if (guildConfig.youtube.channelIds.includes(channelId)) {
@@ -87,7 +116,14 @@ module.exports = {
             ? `\n📢 Notifications → <#${guildConfig.channelId}> *(fallback)*`
             : `\n⚠️ No notification channel set — run \`/setup\` or specify a channel when adding.`;
 
-        await submitted.editReply(`✅ Added YouTube channel to the monitoring list!\nChannel ID: \`${channelId}\`${channelInfo}\n\nThe bot will check for new videos every 5 minutes.`);
+        // Show what was resolved
+        let resolvedInfo = '';
+        if (input.startsWith('@') || input.includes('@')) {
+          const handle = input.startsWith('@') ? input : input.match(/@([\w-]+)/)?.[0];
+          resolvedInfo = `\n✅ Resolved **${handle}** → \`${channelId}\``;
+        }
+
+        await submitted.editReply(`✅ Added YouTube channel to the monitoring list!${resolvedInfo}${channelInfo}\n\nThe bot will check for new videos every 5 minutes.`);
         console.log(`Guild ${interaction.guildId} added ${channelId} to YouTube monitoring (channel: ${notifChannel?.id || 'fallback'})`);
       } else {
         await submitted.editReply('❌ Error saving configuration. Please try again.');
