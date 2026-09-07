@@ -28,14 +28,9 @@ module.exports = {
       .setDescription(`Found ${latestVideos.length} recent video(s) from monitored channels`)
       .setTimestamp();
 
-    // Map videos back to their YT channel ID so we can resolve notif channels
-    const videoChannelMap = {};
-    for (let i = 0; i < latestVideos.length; i++) {
-      videoChannelMap[i] = guildConfig.youtube.channelIds[i];
-    }
-
+    // ✅ FIX: Use channelId from video object instead of index mapping
     latestVideos.forEach((video, index) => {
-      const ytChannelId = videoChannelMap[index];
+      const ytChannelId = video.snippet.channelId;  // Now included in the video object
       const notifChannelId = resolveYouTubeChannel(guildConfig, ytChannelId);
       const channelStr = notifChannelId ? `<#${notifChannelId}>` : '⚠️ No channel';
       embed.addFields({
@@ -75,9 +70,8 @@ module.exports = {
         try {
           if (selection === 'post-all') {
             let posted = 0, skipped = 0;
-            for (let idx = 0; idx < latestVideos.length; idx++) {
-              const video = latestVideos[idx];
-              const ytChannelId = videoChannelMap[idx];
+            for (const video of latestVideos) {
+              const ytChannelId = video.snippet.channelId;  // ✅ Use from video object
               const notifChannelId = resolveYouTubeChannel(guildConfig, ytChannelId);
               if (!notifChannelId) { skipped++; continue; }
               const notifChannel = await client.channels.fetch(notifChannelId);
@@ -96,7 +90,7 @@ module.exports = {
           } else {
             const videoIndex = parseInt(selection.split('-')[1]);
             const video = latestVideos[videoIndex];
-            const ytChannelId = videoChannelMap[videoIndex];
+            const ytChannelId = video.snippet.channelId;  // ✅ Use from video object
             const notifChannelId = resolveYouTubeChannel(guildConfig, ytChannelId);
             if (!notifChannelId) {
               return await i.update({ content: `❌ No notification channel configured for **${video.snippet.channelTitle}**. Use \`/addchannel\` to set one.`, embeds: [], components: [] });

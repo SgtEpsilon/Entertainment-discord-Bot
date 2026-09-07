@@ -4,7 +4,12 @@
   "description": "A Discord bot that monitors Twitch streams and YouTube uploads",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop entertainment-bot",
+    "pm2:restart": "pm2 restart entertainment-bot",
+    "pm2:logs": "pm2 logs entertainment-bot",
+    "pm2:status": "pm2 status"
   },
   "dependencies": {
     "@discordjs/builders": "^1.13.1",
